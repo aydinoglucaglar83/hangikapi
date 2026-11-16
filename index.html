@@ -644,6 +644,47 @@
     } catch (e) { const s = document.getElementById('rsub'); if (s) s.textContent = 'Radar verisi alınamadı, biraz sonra tekrar dene.'; }
   }
 
+  // ============ İBB BAĞLANTI TESTİ (telefondan doğrudan) ============
+  PAGES.ibbtest = {
+    title: 'İBB bağlantı testi',
+    async render() {
+      view.innerHTML = '<div class="card"><div class="t">Telefonundan İBB servislerine doğrudan erişim test ediliyor…</div><div id="ibbout" style="margin-top:10px">' + skel(3) + '</div></div>' + footer;
+      bindFooter();
+      const out = [];
+      const tryFetch = async (label, url) => {
+        const t0 = Date.now();
+        try {
+          const r = await fetch(url, { cache: 'no-store' });
+          const txt = await r.text();
+          let j = null; try { j = JSON.parse(txt); } catch (e) {}
+          return { label, ok: r.ok, status: r.status, ms: Date.now() - t0, j, txt };
+        } catch (e) { return { label, ok: false, status: 'CORS/ağ engeli', ms: Date.now() - t0, err: e.message }; }
+      };
+      const ckan = await tryFetch('İBB açık veri (CKAN)', 'https://data.ibb.gov.tr/api/3/action/package_search?q=hal&rows=1');
+      out.push('<div class="it"><b>' + (ckan.ok ? '✅' : '❌') + ' ' + ckan.label + '</b><div class="s">Durum: ' + esc(ckan.status) + ' · ' + ckan.ms + ' ms</div></div>');
+      let spec = null, specUrl = '';
+      for (const u of ['https://halfiyatlaripublicdata.ibb.gov.tr/swagger/docs/v1', 'https://halfiyatlaripublicdata.ibb.gov.tr/swagger/v1/swagger.json', 'https://halfiyatlaripublicdata.ibb.gov.tr/swagger.json']) {
+        const r = await tryFetch('Hal fiyatları servisi', u);
+        out.push('<div class="it"><b>' + (r.ok && r.j ? '✅' : '❌') + ' Hal servisi şeması</b><div class="s">' + esc(u.replace('https://halfiyatlaripublicdata.ibb.gov.tr', '')) + ' → ' + esc(r.status) + ' · ' + r.ms + ' ms</div></div>');
+        if (r.ok && r.j && r.j.paths) { spec = r.j; specUrl = u; break; }
+      }
+      let html = '<div class="list">' + out.join('') + '</div>';
+      if (spec) {
+        html += '<div class="t" style="margin-top:14px">Hal servisinin adresleri (' + Object.keys(spec.paths).length + ')</div><div class="list">';
+        for (const [p, ops] of Object.entries(spec.paths)) {
+          for (const [m, op] of Object.entries(ops)) {
+            const params = (op.parameters || []).map(x => x.name + (x.required ? '*' : '')).join(', ');
+            html += '<div class="it"><div class="grow"><div class="t" style="font-family:ui-monospace,monospace;font-size:12.5px">' + esc(m.toUpperCase() + ' ' + p) + '</div><div class="s">' + esc(op.summary || op.operationId || '') + (params ? ' · parametreler: ' + esc(params) : '') + '</div></div></div>';
+          }
+        }
+        html += '</div><div class="muted" style="font-size:11px;margin-top:8px">Base: ' + esc((spec.host || '') + (spec.basePath || '')) + '</div>';
+      } else {
+        html += '<div class="info" style="margin-top:12px">Şema okunamadı. Ekranın görüntüsünü Claude\'a gönder.</div>';
+      }
+      document.getElementById('ibbout').innerHTML = html;
+    }
+  };
+
   // ============ AYARLAR ============
   PAGES.settings = {
     title: 'Ayarlar',
