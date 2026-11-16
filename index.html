@@ -166,8 +166,20 @@
   const skel = (n = 3) => Array(n).fill('<div class="skel"></div>').join('');
   const errBox = e => '<div class="' + (e.kind === 'country' ? 'info' : 'err') + '">' + esc(e.message) + '</div>' +
     (e.raw ? '<details><summary>Teknik ayrıntı</summary><pre>' + esc(JSON.stringify(e.raw, null, 2)) + '</pre></details>' : '');
+  // Binek araç (car/passenger) alt nesnesini bul; yoksa genel veriyi kullan
+  const CAR_RE = /^(car|cars|passenger|passengers|passenger_cars?|light|auto|automobile|vehicle_1|type_1|1|легков\S*)$/i;
+  const NONCAR_RE = /truck|lorry|bus|cargo|freight|heavy|автобус|вантаж/i;
+  function carPart(o) {
+    let f = null;
+    walk(o, x => { if (f) return; for (const [k, v] of Object.entries(x)) if (CAR_RE.test(k) && v && typeof v === 'object') { f = v; return; } });
+    if (f) return { part: f, car: true };
+    walk(o, x => { if (f) return; for (const v of Object.values(x)) if (Array.isArray(v)) {
+      const c = v.find(i => i && typeof i === 'object' && Object.entries(i).some(([k, val]) => /vehicle|type|category/i.test(k) && /car|passenger|легков|auto/i.test(String(val))));
+      if (c) { f = c; return; } } });
+    return f ? { part: f, car: true } : { part: o, car: false };
+  }
   function waitOf(q) {
-    for (const [re, f] of [[/^wait_?min/i, 1], [/wait.*min/i, 1], [/wait.*hour/i, 60], [/wait.*sec/i, 1 / 60], [/^wait$|wait_?time|estimated_?wait/i, 1]]) {
+    for (const [re, f] of [[/^car_?wait/i, 1], [/^wait_?min/i, 1], [/wait.*min/i, 1], [/wait.*hour/i, 60], [/wait.*sec/i, 1 / 60], [/^wait$|wait_?time|estimated_?wait/i, 1]]) {
       const v = pick(q, [re]); if (v != null && !isNaN(+v)) return +v * f;
     }
     return null;
@@ -224,14 +236,14 @@
   PAGES.home = {
     render() {
       view.innerHTML =
-        '<div class="hero" id="hero"><div class="lbl">Trakya sınır kapıları · şu an</div><div id="heroBody">' + '<div class="gates">' +
+        '<div class="hero" id="hero"><div class="lbl">🚗 Binek araç · Trakya sınır kapıları · şu an</div><div id="heroBody">' + '<div class="gates">' +
         GATES.slice(0, 3).map(g => '<div class="g"><b>' + g.label + '</b><div class="m">…</div><div class="s">yükleniyor</div></div>').join('') + '</div></div>' +
         '<button id="heroBtn">Detaylar →</button></div>' +
         '<div class="tiles">' +
         tile('fx', '💱', 'Döviz', 'Euro kurları, çevirici') +
         tile('holidays', '📅', 'Tatiller', 'Resmi tatiller, geri sayım') +
         tile('fuel', '⛽', 'Akaryakıt', 'Ülkelere göre fiyatlar') +
-        tile('bans', '🚛', 'Tır yasakları', 'Hafta sonu ve tatil') +
+        tile('tolls', '🛣', 'Vinyet ve otoyol', 'Ülkelere göre ücretler') +
         tile('ask', '🤖', 'Asistana sor', 'Sınırla ilgili her şey') +
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
         '</div>' + footer;
@@ -249,7 +261,7 @@
       if (!gates.length) { box.innerHTML = '<div class="note">Bu kapılar nakordoni\'de bulunamadı.</div>'; return; }
       const cells = [];
       for (const g of gates.slice(0, 3)) {
-        try { const q = data(await api('v1/data/queue', 'ppid=' + g.ppid)); const m = waitOf(q); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
+        try { const q = carPart(data(await api('v1/data/queue', 'ppid=' + g.ppid))).part; const m = waitOf(q); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
         catch (e) { cells.push([g.label, '—', 'veri yok']); }
       }
       if (document.getElementById('heroBody') !== box) return;
@@ -278,15 +290,16 @@
     const el = document.getElementById('g-' + g.ppid); if (!el) return;
     let m = g.wait, len, upd;
     try {
-      const q = data(await api('v1/data/queue', 'ppid=' + g.ppid));
+      const cp = carPart(data(await api('v1/data/queue', 'ppid=' + g.ppid)));
+      const q = cp.part; g.carOnly = cp.car;
       m = waitOf(q); len = pick(q, [/queue_?len/i, /^queue$/i, /cars|vehicles|count/i]); upd = pick(q, [/updated|last_?update|timestamp/i]);
     } catch (e) { el.innerHTML = '<div class="t">' + esc(g.label) + '</div>' + errBox(e); return; }
     const [cls, word] = level(m);
     el.innerHTML =
       '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + '</div>' +
-      '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + ' araç' : '') + (upd ? ' · ' + new Date(upd).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '') + '</div></div>' +
+      '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + (g.carOnly ? ' otomobil' : ' araç') : '') + (upd ? ' · ' + new Date(upd).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '') + '</div></div>' +
       '<span class="pill ' + cls + '">' + word + '</span></div>' +
-      '<div class="big" style="margin:8px 0 4px">' + fmtMin(m) + '</div><div class="muted">tahmini bekleme</div>' +
+      '<div class="big" style="margin:8px 0 4px">' + fmtMin(m) + '</div><div class="muted">tahmini bekleme · ' + (g.carOnly ? '🚗 binek araç' : 'tüm araçlar') + '</div>' +
       '<div class="chips" style="margin-top:12px"><button class="chip" data-a="fc">📈 Sonraki 24 saat</button><button class="chip" data-a="best">🕐 En iyi saat</button><button class="chip" data-a="wx">🌦 Hava</button></div>' +
       '<div class="extra"></div>';
     el.querySelectorAll('.chip').forEach(c => c.onclick = () => {
@@ -311,7 +324,7 @@
         return;
       }
       const d = data(a === 'fc' ? await api('v1/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v1/data/day-stats', 'ppid=' + g.ppid + '&lang=en'));
-      const s = numSeries(d);
+      const s = numSeries(carPart(d).part) || numSeries(d);
       if (!s) { box.innerHTML = '<div class="muted" style="margin-top:12px">Grafik için yeterli veri yok.</div>'; return; }
       const max = Math.max(...s.filter(Number.isFinite), 1), min = Math.min(...s.filter(Number.isFinite));
       const lowIdx = s.indexOf(min);
@@ -384,16 +397,24 @@
     return '<div class="card list">' + flat.map(([k, v]) => '<div class="it"><div class="grow"><div class="t">' + esc(L[k.toLowerCase()] || k.replace(/_/g, ' ')) + '</div></div><b>' + v.toLocaleString('tr-TR', { maximumFractionDigits: 3 }) + '</b></div>').join('') + '</div>';
   });
 
-  // ============ TIR YASAKLARI ============
-  PAGES.bans = countryPage('Tır yasakları', async c => {
-    const d = data(await api('v1/data/truck-bans', 'country=' + c));
-    const arr = mainArray(d);
-    if (!arr.length) return '<div class="card muted">Bu ülke için yasak bilgisi bulunamadı.</div>';
-    return '<div class="card list">' + arr.slice(0, 40).map(r => {
-      const iso = isoIn(r); const time = pick(r, [/time|hours|from/i]); const desc = pick(r, [/desc|note|reason|rule|text/i]);
-      return '<div class="it">' + (iso ? '<div class="badge">' + new Date(iso.slice(0, 10) + 'T12:00:00').getDate() + '<small>' + new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString('tr-TR', { month: 'short' }) + '</small></div>' : '<div class="badge">🚛</div>') +
-        '<div class="grow"><div class="t">' + esc(nameOf(r) || desc || 'Yasak') + '</div><div class="s">' + esc([time, nameOf(r) ? desc : ''].filter(Boolean).join(' · ')) + '</div></div></div>';
-    }).join('') + '</div>';
+  // ============ VİNYET VE OTOYOL ============
+  PAGES.tolls = countryPage('Vinyet ve otoyol', async c => {
+    const d = data(await api('v2/data/vignettes', 'country=' + c));
+    let arr = mainArray(d);
+    const isCar = r => { const t = JSON.stringify(r); return /car|passenger|m1|kategori b|legkov|легков/i.test(t) || !NONCAR_RE.test(t); };
+    const cars = arr.filter(isCar); if (cars.length) arr = cars;
+    if (!arr.length) {
+      const note = pick(d, [/desc|note|info|text|summary/i]);
+      return '<div class="card">' + (note ? esc(note) : '<span class="muted">Bu ülke için vinyet bilgisi bulunamadı.</span>') + '</div>';
+    }
+    return '<div class="card"><div class="muted">🚗 Binek araç için</div><div class="list">' + arr.slice(0, 30).map(r => {
+      const price = pick(r, [/^price/i, /cost|amount|fee|eur/i]); const cur = pick(r, [/currency/i]) || '';
+      const dur = pick(r, [/duration|period|valid|days/i]); const nm = nameOf(r) || pick(r, [/type|kind|product/i]) || 'Vinyet';
+      const url = pick(r, [/url|link|buy/i]);
+      return '<div class="it"><div class="grow"><div class="t">' + esc(nm) + '</div><div class="s">' + esc(dur != null ? (/^\d+$/.test(String(dur)) ? dur + ' gün' : dur) : '') +
+        (url && /^https?:/.test(url) ? ' · <a href="' + esc(url) + '" target="_blank" rel="noopener">satın al</a>' : '') + '</div></div><b>' +
+        (price != null ? (isNaN(+price) ? esc(price) : (+price).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ' + esc(cur)) : '') + '</b></div>';
+    }).join('') + '</div></div>';
   });
 
   // ============ ASİSTAN ============
@@ -401,7 +422,7 @@
     title: 'Asistana sor',
     render() {
       view.innerHTML = '<div id="chat"><div class="bubble">Merhaba! Sınır geçişi, bekleme süreleri, belgeler ya da yol hakkında sorabilirsin.</div></div>' +
-        '<div class="chips" id="sug"><button class="chip">Kapıkule\'de bekleme ne kadar?</button><button class="chip">Bulgaristan\'a girişte hangi belgeler lazım?</button><button class="chip">Bulgaristan vinyeti nasıl alınır?</button></div>' +
+        '<div class="chips" id="sug"><button class="chip">Kapıkule\'de bekleme ne kadar?</button><button class="chip">Bulgaristan\'a girişte hangi belgeler lazım?</button><button class="chip">Arabayla Bulgaristan vinyeti nasıl alınır?</button><button class="chip">Yeşil kart sigortası gerekli mi?</button></div>' +
         '<div class="card" style="position:sticky;bottom:10px"><div class="conv"><input id="q" placeholder="Sorunu yaz…"><button class="btn acc" id="send" style="width:auto">Sor</button></div></div>' + footer;
       bindFooter();
       const send = async (text) => {
@@ -411,7 +432,7 @@
         chat.insertAdjacentHTML('beforeend', '<div class="bubble me">' + esc(q) + '</div><div class="bubble" id="pending">…</div>');
         const p = document.getElementById('pending'); p.removeAttribute('id');
         try {
-          const d = data(await api('v1/data/assistant', 'q=' + encodeURIComponent(q) + '&lang=tr' + (S.gates[0] ? '&ppid=' + S.gates[0].ppid : '')));
+          const d = data(await api('v1/data/assistant', 'q=' + encodeURIComponent(q + ' (binek araçla seyahat ediyorum)') + '&lang=tr' + (S.gates[0] ? '&ppid=' + S.gates[0].ppid : '')));
           p.textContent = typeof d === 'string' ? d : (pick(d, [/^answer$/i, /^reply$/i, /^text$/i, /^message$/i, /response|content/i]) || 'Cevap alınamadı.');
         } catch (e) { p.innerHTML = esc(e.message); }
         p.scrollIntoView({ behavior: 'smooth', block: 'center' });
