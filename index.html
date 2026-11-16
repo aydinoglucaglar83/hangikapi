@@ -78,6 +78,17 @@
   details summary{color:var(--mut);font-size:13px;cursor:pointer;margin-top:10px}
   pre{white-space:pre-wrap;word-break:break-word;font-size:11px;background:#f1efe9;padding:10px;border-radius:10px;max-height:300px;overflow:auto}
   .hide{display:none!important}
+  /* radar */
+  #rmap{height:calc(100vh - 290px);min-height:320px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:#dfe6ec}
+  .rbase{filter:saturate(.35) brightness(1.05)}
+  .rplay{width:48px;height:48px;border-radius:50%;background:var(--ink);color:#fff;font-size:20px;flex:none}
+  .rtag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle;background:#eef0f3;color:var(--mut)}
+  .rtag.now{background:var(--ok-soft);color:var(--ok)} .rtag.fut{background:var(--acc-soft);color:var(--acc)}
+  input[type=range]{width:100%;margin:10px 0 2px;accent-color:var(--acc);padding:0;border:0}
+  .rlegend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);margin-top:8px}
+  .rlegend .bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#9be7ff,#3fa9f5,#1d5fd1,#f5d000,#f58a00,#e8001c,#b0007a)}
+  .me{width:16px;height:16px;border-radius:50%;background:#1d6ff2;border:3px solid #fff;box-shadow:0 0 0 2px rgba(29,111,242,.35)}
+  .leaflet-control-attribution{display:none}
   footer{text-align:center;color:var(--mut);font-size:12.5px;margin-top:22px;line-height:1.8}
   footer a{color:var(--mut)}
   a{color:var(--acc)}
@@ -187,8 +198,11 @@
 
   // ============ YÖNLENDİRME ============
   const PAGES = {};
+  let curPage = null;
   function go(name, push = true) {
+    if (curPage && PAGES[curPage] && PAGES[curPage].leave) PAGES[curPage].leave();
     const p = PAGES[name] || PAGES.home;
+    curPage = PAGES[name] ? name : 'home';
     document.getElementById('bar').classList.toggle('inner', name !== 'home');
     document.getElementById('title').innerHTML = name === 'home' ? 'Hangi<span>Kapı</span>' : esc(p.title);
     if (push) history.pushState({ p: name }, '', name === 'home' ? location.pathname + location.search : '#' + name);
@@ -246,7 +260,7 @@
         tile('tolls', '🛣', 'Vinyet ve otoyol', 'Ülkelere göre ücretler') +
         tile('ask', '🤖', 'Asistana sor', 'Sınırla ilgili her şey') +
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
-        '<a class="tile" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;gap:12px;text-decoration:none;color:inherit" href="' + (onWorker ? 'https://aydinoglucaglar83.github.io/hangikapi/radar.html' : 'radar.html') + '"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></a>' +
+        '<button class="tile" data-p="radar" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></button>' +
         '</div>' + footer;
       view.querySelectorAll('.tile').forEach(t => t.onclick = () => go(t.dataset.p));
       document.getElementById('heroBtn').onclick = () => go('gates');
@@ -443,6 +457,91 @@
       document.getElementById('sug').onclick = e => { const b = e.target.closest('.chip'); if (b) send(b.textContent); };
     }
   };
+
+  // ============ YAĞIŞ RADARI (RainViewer) ============
+  let leafletP = null;
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    if (leafletP) return leafletP;
+    leafletP = new Promise((res, rej) => {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+      const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = res; s.onerror = () => { leafletP = null; rej(); }; document.head.appendChild(s);
+    });
+    return leafletP;
+  }
+  const R = { map: null, frames: [], nowIdx: 0, layers: {}, cur: -1, host: '', play: null, refresh: null, me: null };
+  PAGES.radar = {
+    title: 'Yağış radarı',
+    async render() {
+      view.innerHTML =
+        '<div id="rmap"></div>' +
+        '<div class="card" style="margin-top:10px"><div class="row"><button class="rplay" id="rplay">▶</button>' +
+        '<div class="grow"><div style="font-size:22px;font-weight:800"><span id="rtime">--:--</span><span class="rtag" id="rtag">…</span></div>' +
+        '<div class="muted" style="font-size:12.5px" id="rsub">yükleniyor…</div></div>' +
+        '<button class="iconbtn" id="rloc" aria-label="Konumum">📍</button></div>' +
+        '<input type="range" id="rslider" min="0" max="0" value="0">' +
+        '<div class="rlegend"><span>hafif</span><div class="bar"></div><span>şiddetli</span></div>' +
+        '<div class="muted" style="font-size:11px;margin-top:6px">Weather data by <a href="https://www.rainviewer.com" target="_blank" rel="noopener">RainViewer</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div></div>' + footer;
+      bindFooter();
+      try { await loadLeaflet(); } catch (e) { document.getElementById('rmap').innerHTML = '<div class="err" style="margin:12px">Harita yüklenemedi. İnterneti kontrol edip tekrar dene.</div>'; return; }
+      if (!document.getElementById('rmap')) return; // kullanıcı sayfadan çıktı
+      R.map = L.map('rmap', { zoomControl: false, minZoom: 3, maxZoom: 12 }).setView([41.02, 29.0], 7);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'rbase' }).addTo(R.map);
+      R.layers = {}; R.cur = -1; R.me = null;
+      const sl = document.getElementById('rslider');
+      sl.oninput = () => { rPlay(false); rShow(+sl.value); };
+      document.getElementById('rplay').onclick = () => rPlay(!R.play);
+      document.getElementById('rloc').onclick = () => {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(p => {
+          const ll = [p.coords.latitude, p.coords.longitude];
+          if (R.me) R.me.setLatLng(ll); else R.me = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [16, 16] }) }).addTo(R.map);
+          R.map.setView(ll, 9);
+        }, () => { document.getElementById('rsub').textContent = 'Konum alınamadı, tarayıcıda konum iznini aç.'; }, { timeout: 10000 });
+      };
+      await rLoad();
+      R.refresh = setInterval(rLoad, 5 * 60 * 1000);
+    },
+    leave() { rPlay(false); clearInterval(R.refresh); R.refresh = null; if (R.map) { R.map.remove(); R.map = null; } }
+  };
+  const rFmt = ts => new Date(ts * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  function rLayer(i) {
+    const f = R.frames[i];
+    if (!R.layers[f.path]) R.layers[f.path] = L.tileLayer(R.host + f.path + '/256/{z}/{x}/{y}/2/1_1.png', { opacity: 0, zIndex: 10, maxNativeZoom: 7, maxZoom: 12 });
+    return R.layers[f.path];
+  }
+  function rShow(i) {
+    if (!R.map || !R.frames.length) return;
+    i = (i + R.frames.length) % R.frames.length;
+    const lay = rLayer(i); if (!R.map.hasLayer(lay)) lay.addTo(R.map); lay.setOpacity(0.75);
+    if (R.cur >= 0 && R.cur !== i) rLayer(R.cur).setOpacity(0);
+    const pre = rLayer((i + 1) % R.frames.length); if (!R.map.hasLayer(pre)) pre.addTo(R.map);
+    R.cur = i;
+    const sl = document.getElementById('rslider'); if (sl) sl.value = i;
+    const f = R.frames[i], d = Math.round((f.time - R.frames[R.nowIdx].time) / 60), tag = document.getElementById('rtag');
+    document.getElementById('rtime').textContent = rFmt(f.time);
+    if (i === R.nowIdx) { tag.className = 'rtag now'; tag.textContent = 'şimdi'; }
+    else if (i > R.nowIdx) { tag.className = 'rtag fut'; tag.textContent = 'tahmin +' + d + ' dk'; }
+    else { tag.className = 'rtag'; tag.textContent = d + ' dk'; }
+  }
+  function rPlay(on) {
+    clearInterval(R.play); R.play = null;
+    const b = document.getElementById('rplay'); if (b) b.textContent = on ? '❚❚' : '▶';
+    if (on) R.play = setInterval(() => rShow(R.cur + 1), 700);
+  }
+  async function rLoad() {
+    try {
+      const d = await (await fetch('https://api.rainviewer.com/public/weather-maps.json', { cache: 'no-store' })).json();
+      if (!R.map) return;
+      const past = (d.radar && d.radar.past) || [], nc = (d.radar && d.radar.nowcast) || [];
+      if (!past.length) throw 0;
+      Object.values(R.layers).forEach(l => R.map.removeLayer(l)); R.layers = {}; R.cur = -1;
+      R.host = d.host; R.frames = past.concat(nc); R.nowIdx = past.length - 1;
+      document.getElementById('rslider').max = R.frames.length - 1;
+      document.getElementById('rsub').textContent = 'Güncelleme: ' + rFmt(d.generated) + (nc.length ? ' · 30 dk tahmin dahil' : ' · son 2 saat');
+      rShow(R.nowIdx);
+    } catch (e) { const s = document.getElementById('rsub'); if (s) s.textContent = 'Radar verisi alınamadı, biraz sonra tekrar dene.'; }
+  }
 
   // ============ AYARLAR ============
   PAGES.settings = {
