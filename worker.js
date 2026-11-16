@@ -47,20 +47,18 @@ async function serveFeed(id, cors, ctx) {
 
 // GEÇİCİ: kaynak doğrulama ucu (sabit liste, kullanıcı girdisi almaz)
 const PROBES = {
-  inaturalist: 'https://api.inaturalist.org/v1/observations?lat=41.0&lng=29.0&radius=20&order_by=observed_on&per_page=2',
-  cheapshark: 'https://www.cheapshark.com/api/1.0/deals?pageSize=2',
-  clinicaltrials: 'https://clinicaltrials.gov/api/v2/studies?pageSize=2&sort=StartDate:desc',
-  stackoverflow: 'https://api.stackexchange.com/2.3/questions?order=desc&sort=hot&site=stackoverflow&pagesize=2',
-  ibb_hal: 'https://data.ibb.gov.tr/api/3/action/package_search?q=hal&rows=5',
-  ibb_trafik: 'https://data.ibb.gov.tr/api/3/action/package_search?q=trafik%20indeksi&rows=3',
-  ibb_baraj: 'https://data.ibb.gov.tr/api/3/action/package_search?q=baraj&rows=3',
-  resmigazete: 'https://www.resmigazete.gov.tr/eskiler/2026/11/20261116.htm',
-  bigpara: 'https://bigpara.hurriyet.com.tr/api/v1/hisse/list',
-  eksi: 'https://eksisozluk.com/basliklar/gundem',
-  metar: 'https://aviationweather.gov/api/data/metar?ids=LTFJ,LTFM&format=json',
-  fedreg: 'https://www.federalregister.gov/api/v1/documents.json?conditions[term]=GE%20Aerospace&conditions[agencies][]=federal-aviation-administration&per_page=2&order=newest',
-  openlibrary: 'https://openlibrary.org/trending/daily.json?limit=2',
-  truncgil: 'https://finans.truncgil.com/v4/today.json'
+  jikan_anime: 'https://api.jikan.moe/v4/seasons/now?limit=2',
+  epic_free: 'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?locale=tr&country=TR',
+  meteoalarm_tr: 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-turkey',
+  opet_fuel: 'https://api.opet.com.tr/api/fuelprices/prices?ProvinceCode=34',
+  remotive_jobs: 'https://remotive.com/api/remote-jobs?limit=2',
+  arbeitnow_jobs: 'https://www.arbeitnow.com/api/job-board-api',
+  tcmb_today: 'https://www.tcmb.gov.tr/kurlar/today.xml',
+  eczane_ist: 'https://www.istanbuleczaciodasi.org.tr/nobetci-eczane/',
+  mgm_son: 'https://servis.mgm.gov.tr/web/sondurumlar?merkezid=93401',
+  usgs_water_tr: 'https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt',
+  nhl_nba: 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json',
+  wttr: 'https://wttr.in/Kadikoy?format=j1'
 };
 async function runProbes(only) {
   const out = {};
