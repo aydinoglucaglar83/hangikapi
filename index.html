@@ -304,7 +304,8 @@
       const id = o.ppid ?? (typeof o.id === 'string' && /^id_/.test(o.id) ? o.id : undefined);
       if (id && !seen.has(String(id))) {
         seen.add(String(id));
-        out.push({ ppid: String(id), name: o.name_en || o.name || o.title || o.query || String(id), country: o.country || o.country_to || '' });
+        out.push({ ppid: String(id), name: o.name_en || o.name || o.title || o.query || String(id), country: o.country || o.country_to || '',
+                   txt: JSON.stringify(o).toLowerCase() });
       }
     });
     return out;
@@ -353,12 +354,51 @@
       el.innerHTML = '<b>' + esc(cp.name) + '</b> <span class="sub">' + esc(cp.ppid) + '</span>' + errHtml(e);
     }
   }
+  // Türkçe isim → nakordoni'de geçebilecek diğer isimler (Bulgar/Yunan tarafı)
+  const ALIASES = {
+    kapikule: ['kapikule', 'kapıkule', 'kapitan andreevo', 'капитан андреево', 'andreevo'],
+    hamzabeyli: ['hamzabeyli', 'lesovo', 'лесово'],
+    derekoy: ['derekoy', 'dereköy', 'malko tarnovo', 'малко търново'],
+    ipsala: ['ipsala', 'kipoi', 'kipi', 'κήποι'],
+    pazarkule: ['pazarkule', 'kastanies', 'kastanies', 'καστανιές']
+  };
+  const norm = s => String(s).toLowerCase().replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g').trim();
+  function termsFor(names) {
+    return names.split(',').map(n => n.trim()).filter(Boolean).map(n => ({ label: n, terms: [n.toLowerCase(), norm(n), ...(ALIASES[norm(n)] || [])] }));
+  }
   async function loadGates() {
     $('cards').innerHTML = '<div class="card sub">Kapılar aranıyor…</div>';
+    const wanted = termsFor(S.names);
+    let found = [];
     try {
-      const body = await api('v1/data/search', 'name=' + encodeURIComponent(S.names) + '&lang=en');
-      S.checkpoints = findCheckpoints(body);
-      if (!S.checkpoints.length) { $('cards').innerHTML = '<div class="card"><div class="err">Kapı kodu bulunamadı. ⚙︎ ayarlardan isimleri kontrol et.</div>' + resultHtml(body) + '</div>'; return; }
+      // 1) Önce doğrudan arama (Türkçe + Bulgarca isimlerle)
+      const allNames = [...new Set(wanted.flatMap(w => w.terms.filter(t => /^[a-z ]+$/.test(t))))].slice(0, 20);
+      const body = await api('v1/data/search', 'name=' + encodeURIComponent(allNames.join(',')) + '&lang=en');
+      found = findCheckpoints(body);
+      // 2) Bulamazsa 791 kapılık listeden eşleştir
+      if (!found.length) {
+        $('cards').innerHTML = '<div class="card sub">Arama boş döndü, kapı listesinde aranıyor…</div>';
+        const all = await api('v1/data/checkpoints');
+        const list = findCheckpoints(all);
+        for (const w of wanted) {
+          const m = list.filter(c => w.terms.some(t => c.txt.includes(t) || norm(c.txt).includes(norm(t))));
+          m.forEach(c => { if (!found.some(f => f.ppid === c.ppid)) found.push(c); });
+        }
+        if (!found.length) {
+          const trbg = list.filter(c => /"(tr|bg|tur|bgr|turkey|türkiye|bulgaria)"/.test(c.txt) || /turkey|türkiye|bulgaria/.test(c.txt));
+          $('cards').innerHTML = '<div class="card"><div class="err">İstenen kapılar nakordoni\'nin ' + list.length + ' kapılık listesinde bulunamadı.</div>' +
+            (trbg.length ? '<div class="sub" style="margin:6px 0">Türkiye/Bulgaristan ile ilgili bulunan kapılar — birine dokun:</div>' +
+              trbg.map(c => '<button class="sm" style="margin:3px" data-pp="' + esc(c.ppid) + '">' + esc(c.name) + '</button>').join('')
+              : '<div class="sub" style="margin-top:6px">Listede Türkiye/Bulgaristan kapısı görünmüyor. Nakordoni bu sınırı kapsamıyor olabilir.</div>') +
+            '<details><summary>Tüm kapı listesi</summary>' + resultHtml(all) + '</details></div>';
+          $('cards').querySelectorAll('button[data-pp]').forEach(b => b.onclick = () => {
+            const c = trbg.find(x => x.ppid === b.dataset.pp); S.checkpoints = [c]; S.ppid = c.ppid; store.set('hk_ppid', c.ppid); fillPpidSelects();
+            $('cards').innerHTML = ''; const el = document.createElement('div'); el.className = 'card'; $('cards').appendChild(el); loadCard(c, el);
+          });
+          return;
+        }
+      }
+      S.checkpoints = found;
     } catch (e) { $('cards').innerHTML = '<div class="card">' + errHtml(e) + '</div>'; return; }
     if (!S.ppid || !S.checkpoints.some(c => c.ppid === S.ppid)) S.ppid = S.checkpoints[0].ppid;
     fillPpidSelects();
