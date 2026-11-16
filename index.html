@@ -657,15 +657,17 @@
           const r = await fetch(url, { cache: 'no-store' });
           const txt = await r.text();
           let j = null; try { j = JSON.parse(txt); } catch (e) {}
-          return { label, ok: r.ok, status: r.status, ms: Date.now() - t0, j, txt };
+          const colo = r.headers.get('X-Colo') || (j && j.colo) || '';
+          return { label, ok: r.ok, status: r.status + (colo ? ' · merkez ' + colo : '') + (j && j.detail ? ' · ' + j.detail.slice(0, 60) : ''), ms: Date.now() - t0, j, txt };
         } catch (e) { return { label, ok: false, status: 'CORS/ağ engeli', ms: Date.now() - t0, err: e.message }; }
       };
-      const ckan = await tryFetch('İBB açık veri (CKAN)', 'https://data.ibb.gov.tr/api/3/action/package_search?q=hal&rows=1');
+      const ckan = await tryFetch('İBB açık veri (CKAN)', S.url.replace(/\/+$/, '') + '/ibb/ckan/package_search?q=hal&rows=1');
       out.push('<div class="it"><b>' + (ckan.ok ? '✅' : '❌') + ' ' + ckan.label + '</b><div class="s">Durum: ' + esc(ckan.status) + ' · ' + ckan.ms + ' ms</div></div>');
       let spec = null, specUrl = '';
-      for (const u of ['https://halfiyatlaripublicdata.ibb.gov.tr/swagger/docs/v1', 'https://halfiyatlaripublicdata.ibb.gov.tr/swagger/v1/swagger.json', 'https://halfiyatlaripublicdata.ibb.gov.tr/swagger.json']) {
+      const HB = S.url.replace(/\/+$/, '') + '/ibb/hal/';
+      for (const u of [HB + 'swagger/docs/v1', HB + 'swagger/v1/swagger.json', HB + 'swagger.json']) {
         const r = await tryFetch('Hal fiyatları servisi', u);
-        out.push('<div class="it"><b>' + (r.ok && r.j ? '✅' : '❌') + ' Hal servisi şeması</b><div class="s">' + esc(u.replace('https://halfiyatlaripublicdata.ibb.gov.tr', '')) + ' → ' + esc(r.status) + ' · ' + r.ms + ' ms</div></div>');
+        out.push('<div class="it"><b>' + (r.ok && r.j ? '✅' : '❌') + ' Hal servisi şeması</b><div class="s">' + esc(u.replace(HB, '/')) + ' → ' + esc(r.status) + ' · ' + r.ms + ' ms</div></div>');
         if (r.ok && r.j && r.j.paths) { spec = r.j; specUrl = u; break; }
       }
       let html = '<div class="list">' + out.join('') + '</div>';
