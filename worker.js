@@ -47,23 +47,23 @@ async function serveFeed(id, cors, ctx) {
 
 // GEÇİCİ: kaynak doğrulama ucu (sabit liste, kullanıcı girdisi almaz)
 const PROBES = {
-  gracedb: 'https://gracedb.ligo.org/api/superevents/?format=json&count=2',
-  nist_beacon: 'https://beacon.nist.gov/beacon/2.0/pulse/last',
-  jwst_sched: 'https://www.stsci.edu/jwst/science-execution/observing-schedules',
-  gmn_meteors: 'https://globalmeteornetwork.org/data/traj_summary_data/daily/traj_summary_yesterday.txt',
-  ioc_sealevel: 'https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&showall=a',
-  sdo_sun: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg',
-  mars_raw: 'https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=2',
-  portwatch: 'https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/Daily_Chokepoints_Data/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2&orderByFields=date%20DESC&f=json',
-  mpc_neocp: 'https://www.minorplanetcenter.net/iau/NEO/neocp.txt'
+  open_prices_tr: { u: 'https://prices.openfoodfacts.org/api/v1/prices?location_osm_address_country=T%C3%BCrkiye&size=2&order_by=-date' },
+  gamerpower: { u: 'https://www.gamerpower.com/api/giveaways?sort-by=date' },
+  uv_index: { u: 'https://currentuvindex.com/api/v1/uvi?latitude=40.98&longitude=29.06' },
+  pollen_ist: { u: 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.98&longitude=29.06&current=alder_pollen,birch_pollen,grass_pollen,olive_pollen,ragweed_pollen&domains=cams_europe' },
+  citybikes_ist: { u: 'https://api.citybik.es/v2/networks?fields=id,name,location', find: 'stanbul' },
+  steam_specials: { u: 'https://store.steampowered.com/api/featuredcategories?cc=tr&l=turkish' }
 };
 async function runProbes(only) {
   const out = {};
-  await Promise.all(Object.entries(PROBES).filter(([k]) => !only || k === only).map(async ([k, u]) => {
+  await Promise.all(Object.entries(PROBES).filter(([k]) => !only || k === only).map(async ([k, p]) => {
+    if (typeof p === 'string') p = { u: p };
     try {
-      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(9000) });
-      const t = (await r.text()).slice(0, 2000);
-      out[k] = { status: r.status, type: (r.headers.get('content-type') || '').slice(0, 40), head: t.slice(0, 200).replace(/\s+/g, ' ') };
+      const r = await fetch(p.u, { headers: { 'User-Agent': 'HangiKapi/1.0 (kaynak testi)', 'Accept': 'application/json' }, signal: AbortSignal.timeout(9000) });
+      const full = await r.text();
+      const o = { status: r.status, type: (r.headers.get('content-type') || '').slice(0, 40), size: full.length, head: full.slice(0, 220).replace(/\s+/g, ' ') };
+      if (p.find) { const i = full.indexOf(p.find); o.found = i >= 0; if (i >= 0) o.sample = full.slice(Math.max(0, i - 120), i + 120); }
+      out[k] = o;
     } catch (e) { out[k] = { error: String(e) }; }
   }));
   return out;
