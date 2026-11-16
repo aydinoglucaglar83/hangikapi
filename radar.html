@@ -28,6 +28,7 @@
   .foot{font-size:10.5px;color:var(--mut);margin-top:6px;display:flex;justify-content:space-between;gap:8px}
   .foot a{color:var(--mut)}
   .leaflet-control-attribution{display:none}
+  .base{filter:saturate(.35) brightness(1.05)}
   .me{width:16px;height:16px;border-radius:50%;background:#1d6ff2;border:3px solid #fff;box-shadow:0 0 0 2px rgba(29,111,242,.35)}
 </style>
 </head>
@@ -69,7 +70,8 @@
 
   // ---- Harita (İstanbul merkezli) ----
   const map = L.map('map', { zoomControl: false, minZoom: 3, maxZoom: 12 }).setView([41.02, 29.0], 7);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+  // OpenStreetMap standart altlık (anahtarsız); radarın daha net görünmesi için hafif soluklaştırılır
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'base' }).addTo(map);
 
   // ---- RainViewer ----
   let host = '', frames = [], nowIdx = 0, layers = {}, cur = -1, timer = null;
