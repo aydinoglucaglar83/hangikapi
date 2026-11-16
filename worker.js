@@ -62,13 +62,13 @@ const PROBES = {
   openlibrary: 'https://openlibrary.org/trending/daily.json?limit=2',
   truncgil: 'https://finans.truncgil.com/v4/today.json'
 };
-async function runProbes() {
+async function runProbes(only) {
   const out = {};
-  await Promise.all(Object.entries(PROBES).map(async ([k, u]) => {
+  await Promise.all(Object.entries(PROBES).filter(([k]) => !only || k === only).map(async ([k, u]) => {
     try {
-      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, cf: { cacheTtl: 0 } });
-      const t = await r.text();
-      out[k] = { status: r.status, type: r.headers.get('content-type'), size: t.length, head: t.slice(0, 350).replace(/\s+/g, ' ') };
+      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(6000) });
+      const t = (await r.text()).slice(0, 2000);
+      out[k] = { status: r.status, type: (r.headers.get('content-type') || '').slice(0, 40), head: t.slice(0, 200).replace(/\s+/g, ' ') };
     } catch (e) { out[k] = { error: String(e) }; }
   }));
   return out;
@@ -115,7 +115,7 @@ export default {
       return json({ error: 'Sadece GET ve POST' }, 405, cors);
     }
     const path = url.pathname;
-    if (path === '/probe') return new Response(JSON.stringify(await runProbes(), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+    if (path === '/probe') return new Response(JSON.stringify(await runProbes(url.searchParams.get('k')), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
     const fm = path.match(/^\/feed\/([a-z0-9]+)$/);
     if (fm && request.method === 'GET') return serveFeed(fm[1], cors, ctx);
     if (!ALLOWED_PATHS.test(path) || path.includes('..')) {
