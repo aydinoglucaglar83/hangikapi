@@ -47,24 +47,21 @@ async function serveFeed(id, cors, ctx) {
 
 // GEÇİCİ: kaynak doğrulama ucu (sabit liste, kullanıcı girdisi almaz)
 const PROBES = {
-  jikan_anime: 'https://api.jikan.moe/v4/seasons/now?limit=2',
-  epic_free: 'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?locale=tr&country=TR',
-  meteoalarm_tr: 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-turkey',
-  opet_fuel: 'https://api.opet.com.tr/api/fuelprices/prices?ProvinceCode=34',
-  remotive_jobs: 'https://remotive.com/api/remote-jobs?limit=2',
-  arbeitnow_jobs: 'https://www.arbeitnow.com/api/job-board-api',
-  tcmb_today: 'https://www.tcmb.gov.tr/kurlar/today.xml',
-  eczane_ist: 'https://www.istanbuleczaciodasi.org.tr/nobetci-eczane/',
-  mgm_son: 'https://servis.mgm.gov.tr/web/sondurumlar?merkezid=93401',
-  usgs_water_tr: 'https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt',
-  nhl_nba: 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json',
-  wttr: 'https://wttr.in/Kadikoy?format=j1'
+  gracedb: 'https://gracedb.ligo.org/api/superevents/?format=json&count=2',
+  nist_beacon: 'https://beacon.nist.gov/beacon/2.0/pulse/last',
+  jwst_sched: 'https://www.stsci.edu/jwst/science-execution/observing-schedules',
+  gmn_meteors: 'https://globalmeteornetwork.org/data/traj_summary_data/daily/traj_summary_yesterday.txt',
+  ioc_sealevel: 'https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&showall=a',
+  sdo_sun: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg',
+  mars_raw: 'https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=2',
+  portwatch: 'https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/Daily_Chokepoints_Data/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2&orderByFields=date%20DESC&f=json',
+  mpc_neocp: 'https://www.minorplanetcenter.net/iau/NEO/neocp.txt'
 };
 async function runProbes(only) {
   const out = {};
   await Promise.all(Object.entries(PROBES).filter(([k]) => !only || k === only).map(async ([k, u]) => {
     try {
-      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(6000) });
+      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(9000) });
       const t = (await r.text()).slice(0, 2000);
       out[k] = { status: r.status, type: (r.headers.get('content-type') || '').slice(0, 40), head: t.slice(0, 200).replace(/\s+/g, ' ') };
     } catch (e) { out[k] = { error: String(e) }; }
