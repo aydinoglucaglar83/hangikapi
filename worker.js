@@ -47,12 +47,12 @@ async function serveFeed(id, cors, ctx) {
 
 // GEÇİCİ: kaynak doğrulama ucu (sabit liste, kullanıcı girdisi almaz)
 const PROBES = {
-  open_prices_tr: { u: 'https://prices.openfoodfacts.org/api/v1/prices?location_osm_address_country=T%C3%BCrkiye&size=2&order_by=-date' },
-  gamerpower: { u: 'https://www.gamerpower.com/api/giveaways?sort-by=date' },
-  uv_index: { u: 'https://currentuvindex.com/api/v1/uvi?latitude=40.98&longitude=29.06' },
-  pollen_ist: { u: 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.98&longitude=29.06&current=alder_pollen,birch_pollen,grass_pollen,olive_pollen,ragweed_pollen&domains=cams_europe' },
-  citybikes_ist: { u: 'https://api.citybik.es/v2/networks?fields=id,name,location', find: 'stanbul' },
-  steam_specials: { u: 'https://store.steampowered.com/api/featuredcategories?cc=tr&l=turkish' }
+  stooq_quotes: { u: 'https://stooq.com/q/l/?s=aapl.us,cl.f,xauusd&f=sd2t2ohlcv&h&e=json' },
+  us_treasury_rates: { u: 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?sort=-record_date&page[size]=2' },
+  ecb_estr: { u: 'https://data-api.ecb.europa.eu/service/data/EST/B.EU000A2X2A25.WT?lastNObservations=2&format=jsondata' },
+  himalayas_jobs: { u: 'https://himalayas.app/jobs/api?limit=2' },
+  bls_cpi: { u: 'https://api.bls.gov/publicAPI/v1/timeseries/data/CUUR0000SA0' },
+  ree_spain_power: { u: 'https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real?start_date=2026-11-16T00:00&end_date=2026-11-16T23:59&time_trunc=hour' }
 };
 async function runProbes(only) {
   const out = {};
