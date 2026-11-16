@@ -113,7 +113,7 @@ export default {
       return json({ error: 'Sadece GET ve POST' }, 405, cors);
     }
     const path = url.pathname;
-    if (path === '/probe') return new Response(JSON.stringify(await runProbes(url.searchParams.get('k')), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+    if (path === '/probe' || path.startsWith('/probe/')) return new Response(JSON.stringify(await runProbes(url.searchParams.get('k')), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
     const fm = path.match(/^\/feed\/([a-z0-9]+)$/);
     if (fm && request.method === 'GET') return serveFeed(fm[1], cors, ctx);
     if (!ALLOWED_PATHS.test(path) || path.includes('..')) {
