@@ -44,6 +44,36 @@ async function serveFeed(id, cors, ctx) {
   return new Response(xml, { status: r.status, headers: { ...cors, 'Content-Type': 'application/xml; charset=utf-8', 'X-Cache': 'MISS' } });
 }
 
+
+// GEÇİCİ: kaynak doğrulama ucu (sabit liste, kullanıcı girdisi almaz)
+const PROBES = {
+  inaturalist: 'https://api.inaturalist.org/v1/observations?lat=41.0&lng=29.0&radius=20&order_by=observed_on&per_page=2',
+  cheapshark: 'https://www.cheapshark.com/api/1.0/deals?pageSize=2',
+  clinicaltrials: 'https://clinicaltrials.gov/api/v2/studies?pageSize=2&sort=StartDate:desc',
+  stackoverflow: 'https://api.stackexchange.com/2.3/questions?order=desc&sort=hot&site=stackoverflow&pagesize=2',
+  ibb_hal: 'https://data.ibb.gov.tr/api/3/action/package_search?q=hal&rows=5',
+  ibb_trafik: 'https://data.ibb.gov.tr/api/3/action/package_search?q=trafik%20indeksi&rows=3',
+  ibb_baraj: 'https://data.ibb.gov.tr/api/3/action/package_search?q=baraj&rows=3',
+  resmigazete: 'https://www.resmigazete.gov.tr/eskiler/2026/11/20261116.htm',
+  bigpara: 'https://bigpara.hurriyet.com.tr/api/v1/hisse/list',
+  eksi: 'https://eksisozluk.com/basliklar/gundem',
+  metar: 'https://aviationweather.gov/api/data/metar?ids=LTFJ,LTFM&format=json',
+  fedreg: 'https://www.federalregister.gov/api/v1/documents.json?conditions[term]=GE%20Aerospace&conditions[agencies][]=federal-aviation-administration&per_page=2&order=newest',
+  openlibrary: 'https://openlibrary.org/trending/daily.json?limit=2',
+  truncgil: 'https://finans.truncgil.com/v4/today.json'
+};
+async function runProbes() {
+  const out = {};
+  await Promise.all(Object.entries(PROBES).map(async ([k, u]) => {
+    try {
+      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (HangiKapi kaynak testi)', 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' }, cf: { cacheTtl: 0 } });
+      const t = await r.text();
+      out[k] = { status: r.status, type: r.headers.get('content-type'), size: t.length, head: t.slice(0, 350).replace(/\s+/g, ' ') };
+    } catch (e) { out[k] = { error: String(e) }; }
+  }));
+  return out;
+}
+
 const ALLOWED_PATHS = /^\/nk\/v[12]\/(data\/[a-z0-9][a-z0-9\-\/,_]*|account\/usage)$/i;
 
 function corsHeaders(origin) {
@@ -85,6 +115,7 @@ export default {
       return json({ error: 'Sadece GET ve POST' }, 405, cors);
     }
     const path = url.pathname;
+    if (path === '/probe') return new Response(JSON.stringify(await runProbes(), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
     const fm = path.match(/^\/feed\/([a-z0-9]+)$/);
     if (fm && request.method === 'GET') return serveFeed(fm[1], cors, ctx);
     if (!ALLOWED_PATHS.test(path) || path.includes('..')) {
