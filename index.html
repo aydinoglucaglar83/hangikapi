@@ -246,6 +246,7 @@
         tile('tolls', '🛣', 'Vinyet ve otoyol', 'Ülkelere göre ücretler') +
         tile('ask', '🤖', 'Asistana sor', 'Sınırla ilgili her şey') +
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
+        '<a class="tile" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;gap:12px;text-decoration:none;color:inherit" href="' + (onWorker ? 'https://aydinoglucaglar83.github.io/hangikapi/radar.html' : 'radar.html') + '"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></a>' +
         '</div>' + footer;
       view.querySelectorAll('.tile').forEach(t => t.onclick = () => go(t.dataset.p));
       document.getElementById('heroBtn').onclick = () => go('gates');

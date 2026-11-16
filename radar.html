@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d2433">
+<title>Yağış Radarı</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{--ink:#1d2433;--mut:#6b7280;--acc:#e2572b;--line:#e7e3da}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+  #map{position:fixed;inset:0;background:#dfe6ec}
+  .top{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;z-index:1000;display:flex;gap:8px;align-items:center}
+  .pill{background:rgba(255,255,255,.95);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(0,0,0,.15);font-size:14px;font-weight:600;border:0;color:inherit;text-decoration:none}
+  .pill.grow{flex:1;text-align:center}
+  .panel{position:fixed;left:10px;right:10px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:1000;background:rgba(255,255,255,.97);border-radius:20px;padding:12px 14px;box-shadow:0 4px 18px rgba(0,0,0,.18)}
+  .row{display:flex;align-items:center;gap:12px}
+  .play{width:48px;height:48px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:20px;flex:none}
+  .time{font-size:22px;font-weight:800;letter-spacing:-.5px}
+  .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+  .past{background:#eef0f3;color:var(--mut)} .now{background:#e5f6ed;color:#1f9d61} .fut{background:#fdeee7;color:var(--acc)}
+  input[type=range]{width:100%;margin:10px 0 2px;accent-color:var(--acc)}
+  .ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--mut)}
+  .legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);margin-top:8px}
+  .legend .bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#9be7ff,#3fa9f5,#1d5fd1,#f5d000,#f58a00,#e8001c,#b0007a)}
+  .msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;background:#fff;border-radius:16px;padding:16px 18px;box-shadow:0 4px 18px rgba(0,0,0,.2);font-size:14px;max-width:80%;text-align:center}
+  .foot{font-size:10.5px;color:var(--mut);margin-top:6px;display:flex;justify-content:space-between;gap:8px}
+  .foot a{color:var(--mut)}
+  .leaflet-control-attribution{display:none}
+  .me{width:16px;height:16px;border-radius:50%;background:#1d6ff2;border:3px solid #fff;box-shadow:0 0 0 2px rgba(29,111,242,.35)}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="top">
+  <a class="pill" href="./">← HangiKapı</a>
+  <div class="pill grow">🌧 Yağış radarı</div>
+  <button class="pill" id="locBtn" aria-label="Konumum">📍</button>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <button class="play" id="playBtn" aria-label="Oynat">▶</button>
+    <div style="flex:1;min-width:0">
+      <div class="time"><span id="tLabel">--:--</span><span id="tTag" class="tag past">geçmiş</span></div>
+      <div style="font-size:12px;color:var(--mut)" id="tSub">yükleniyor…</div>
+    </div>
+  </div>
+  <input type="range" id="slider" min="0" max="0" value="0" step="1">
+  <div class="ticks"><span id="t0">-2 sa</span><span>şimdi</span><span id="t1"></span></div>
+  <div class="legend"><span>hafif</span><div class="bar"></div><span>şiddetli</span></div>
+  <div class="foot">
+    <span>Weather data by <a href="https://www.rainviewer.com" target="_blank" rel="noopener">RainViewer</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span>
+    <a href="#" id="dl">⬇︎ indir</a>
+  </div>
+</div>
+
+<div class="msg" id="msg" style="display:none"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const SOURCE = '<!DOCTYPE html>\n' + document.documentElement.outerHTML; // harita kurulmadan önceki temiz hâl
+  const msg = document.getElementById('msg');
+  const show = t => { msg.textContent = t; msg.style.display = t ? 'block' : 'none'; };
+  if (!window.L) { show('Harita yüklenemedi. İnternet bağlantını kontrol edip sayfayı yenile.'); return; }
+
+  // ---- Harita (İstanbul merkezli) ----
+  const map = L.map('map', { zoomControl: false, minZoom: 3, maxZoom: 12 }).setView([41.02, 29.0], 7);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+
+  // ---- RainViewer ----
+  let host = '', frames = [], nowIdx = 0, layers = {}, cur = -1, timer = null;
+  const slider = document.getElementById('slider');
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  function layerFor(i) {
+    const f = frames[i];
+    if (!layers[f.path]) {
+      // 256 px, renk şeması 2 (evrensel mavi), yumuşatma 1, kar 1
+      layers[f.path] = L.tileLayer(host + f.path + '/256/{z}/{x}/{y}/2/1_1.png', {
+        opacity: 0, zIndex: 10, maxNativeZoom: 7, maxZoom: 12, tileSize: 256
+      });
+    }
+    return layers[f.path];
+  }
+  function showFrame(i) {
+    if (!frames.length) return;
+    i = (i + frames.length) % frames.length;
+    const next = layerFor(i);
+    if (!map.hasLayer(next)) next.addTo(map);
+    next.setOpacity(0.75);
+    if (cur >= 0 && cur !== i) { const prev = layerFor(cur); prev.setOpacity(0); }
+    // bir sonraki kareyi önceden yükle
+    const pre = layerFor((i + 1) % frames.length); if (!map.hasLayer(pre)) pre.addTo(map);
+    cur = i; slider.value = i;
+    const f = frames[i];
+    document.getElementById('tLabel').textContent = fmt(f.time);
+    const tag = document.getElementById('tTag');
+    const diff = Math.round((f.time - frames[nowIdx].time) / 60);
+    if (i === nowIdx) { tag.className = 'tag now'; tag.textContent = 'şimdi'; }
+    else if (i > nowIdx) { tag.className = 'tag fut'; tag.textContent = 'tahmin +' + diff + ' dk'; }
+    else { tag.className = 'tag past'; tag.textContent = diff + ' dk'; }
+  }
+  function play(on) {
+    clearInterval(timer); timer = null;
+    document.getElementById('playBtn').textContent = on ? '❚❚' : '▶';
+    if (on) timer = setInterval(() => showFrame(cur + 1), 700);
+  }
+
+  async function load() {
+    try {
+      const r = await fetch('https://api.rainviewer.com/public/weather-maps.json', { cache: 'no-store' });
+      const d = await r.json();
+      host = d.host;
+      const past = (d.radar && d.radar.past) || [], nowcast = (d.radar && d.radar.nowcast) || [];
+      if (!past.length) throw new Error('boş');
+      // eski katmanları temizle
+      Object.values(layers).forEach(l => map.removeLayer(l)); layers = {}; cur = -1;
+      frames = past.concat(nowcast); nowIdx = past.length - 1;
+      slider.max = frames.length - 1;
+      document.getElementById('t0').textContent = '-' + Math.round((frames[nowIdx].time - frames[0].time) / 60) + ' dk';
+      document.getElementById('t1').textContent = nowcast.length ? '+' + Math.round((frames[frames.length - 1].time - frames[nowIdx].time) / 60) + ' dk' : '';
+      document.getElementById('tSub').textContent = 'Güncelleme: ' + fmt(d.generated) + (nowcast.length ? ' · tahmin dahil' : ' · sadece geçmiş veri');
+      show('');
+      showFrame(nowIdx);
+    } catch (e) {
+      show('Radar verisi alınamadı. Biraz sonra tekrar dene.');
+    }
+  }
+
+  slider.oninput = () => { play(false); showFrame(+slider.value); };
+  document.getElementById('playBtn').onclick = () => play(!timer);
+
+  // ---- Konum ----
+  let meMarker = null;
+  document.getElementById('locBtn').onclick = () => {
+    if (!navigator.geolocation) return show('Bu tarayıcı konum vermiyor.');
+    navigator.geolocation.getCurrentPosition(p => {
+      const ll = [p.coords.latitude, p.coords.longitude];
+      if (meMarker) meMarker.setLatLng(ll);
+      else meMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [16, 16] }) }).addTo(map);
+      map.setView(ll, 9);
+    }, () => { show('Konum alınamadı. Tarayıcıda konum iznini aç.'); setTimeout(() => show(''), 2500); }, { timeout: 10000 });
+  };
+
+  // ---- İndir ----
+  document.getElementById('dl').onclick = ev => {
+    ev.preventDefault();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' }));
+    a.download = 'yagis-radari.html'; document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  load();
+  setInterval(load, 5 * 60 * 1000); // 5 dakikada bir yenile
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+})();
+</script>
+</body>
+</html>
