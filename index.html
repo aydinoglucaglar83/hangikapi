@@ -266,6 +266,7 @@
         tile('tolls', '🛣', 'Vinyet ve otoyol', 'Ülkelere göre ücretler') +
         tile('ask', '🤖', 'Asistana sor', 'Sınırla ilgili her şey') +
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
+        '<button class="tile" data-p="aanews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">📰</span><span><b>Son dakika</b><small>Anadolu Ajansı · güncel, ekonomi, dünya, spor…</small></span></button>' +
         '<button class="tile" data-p="avnews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">✈️</span><span><b>Havacılık haberleri</b><small>AirportHaber, Havayolu101, Simple Flying, AeroTime</small></span></button>' +
         '<button class="tile" data-p="radar" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></button>' +
         '</div>' + footer;
@@ -523,6 +524,39 @@
       : '<div class="muted">Haber bulunamadı.</div>';
     const info = document.getElementById('avinfo');
     if (info) info.textContent = (AV.failed && AV.failed.length ? 'Alınamayan kaynak: ' + AV.failed.join(', ') + ' · ' : '') + 'Son yenileme: ' + new Date(AV.loaded).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ============ SON DAKİKA (Anadolu Ajansı RSS) ============
+  const AA_CATS = [{"id": "aaguncel", "name": "Güncel", "lang": "tr"}, {"id": "aaturkiye", "name": "Türkiye", "lang": "tr"}, {"id": "aaekonomi", "name": "Ekonomi", "lang": "tr"}, {"id": "aadunya", "name": "Dünya", "lang": "tr"}, {"id": "aaspor", "name": "Spor", "lang": "tr"}, {"id": "aabilimteknoloji", "name": "Bilim-Teknoloji", "lang": "tr"}, {"id": "aasaglik", "name": "Sağlık", "lang": "tr"}, {"id": "aakultursanat", "name": "Kültür-Sanat", "lang": "tr"}];
+  const AAS = { cat: AA_CATS[0].id, cache: {} };
+  PAGES.aanews = {
+    title: 'Son dakika · AA',
+    render() {
+      view.innerHTML = '<div class="chips" id="aac">' + AA_CATS.map(c => '<button class="chip' + (c.id === AAS.cat ? ' on' : '') + '" data-c="' + c.id + '">' + esc(c.name) + '</button>').join('') +
+        '</div><div class="card" id="aalist">' + skel(5) + '</div><div class="muted" id="aainfo" style="text-align:center;font-size:12px"></div>' +
+        '<div class="muted" style="text-align:center;font-size:11px;margin-top:4px">Kaynak: <a href="https://www.aa.com.tr" target="_blank" rel="noopener">Anadolu Ajansı</a></div>' + footer;
+      bindFooter();
+      document.getElementById('aac').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; AAS.cat = b.dataset.c; document.querySelectorAll('#aac .chip').forEach(x => x.classList.toggle('on', x === b)); aaLoad(); };
+      aaLoad();
+    }
+  };
+  async function aaLoad() {
+    const box = document.getElementById('aalist'); if (!box) return;
+    const cat = AA_CATS.find(c => c.id === AAS.cat);
+    const c = AAS.cache[cat.id];
+    if (!(c && Date.now() - c.t < 3 * 60 * 1000)) {
+      box.innerHTML = skel(5);
+      try { AAS.cache[cat.id] = { t: Date.now(), items: (await loadFeed(cat)).sort((a, b) => b.t - a.t) }; }
+      catch (e) { if (AAS.cat === cat.id) box.innerHTML = '<div class="err">' + esc(cat.name) + ' haberleri şu an alınamadı.</div>'; return; }
+    }
+    if (AAS.cat !== cat.id || !document.getElementById('aalist')) return;
+    const { items, t } = AAS.cache[cat.id];
+    box.innerHTML = items.length ? items.map(x =>
+      '<a class="news" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
+      (x.img ? '<img loading="lazy" src="' + esc(x.img) + '" alt="" onerror="this.remove()">' : '') +
+      '<div class="grow"><div class="t">' + esc(x.title) + '</div><div class="src">' + (x.t ? ago(x.t) : '') + (x.desc ? ' · ' + esc(x.desc.slice(0, 90)) + (x.desc.length > 90 ? '…' : '') : '') + '</div></div></a>').join('')
+      : '<div class="muted">Haber bulunamadı.</div>';
+    const info = document.getElementById('aainfo'); if (info) info.textContent = 'Son yenileme: ' + new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   }
 
   // ============ YAĞIŞ RADARI (RainViewer) ============
