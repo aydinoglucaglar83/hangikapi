@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HangiKapı — Nakordoni Gezgin</title>
+<style>
+  :root{--bg:#0f1419;--card:#1a2129;--line:#2a333d;--text:#e8edf2;--mut:#8b98a5;--acc:#3b9eff;--ok:#2fbf71;--mid:#f2b33d;--bad:#ef5350}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:16px}
+  header{padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  h1{font-size:20px;margin:0}
+  .sub{color:var(--mut);font-size:13px}
+  nav{display:flex;gap:6px;margin-top:10px;overflow-x:auto}
+  nav button{white-space:nowrap}
+  nav button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  main{padding:10px 12px 40px;max-width:760px;margin:0 auto}
+  button,select,input,textarea{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  textarea{width:100%;min-height:90px;font-family:ui-monospace,monospace;font-size:13px}
+  button{cursor:pointer}
+  button:disabled{opacity:.5}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  button.sm{padding:6px 10px;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grow{flex:1;min-width:0}
+  .big{font-size:30px;font-weight:700}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .p-ok{background:#1d3a2b;color:var(--ok)}.p-mid{background:#3d3218;color:var(--mid)}.p-bad{background:#3d1f1f;color:var(--bad)}.p-na{background:#2a333d;color:var(--mut)}
+  .kv{display:grid;grid-template-columns:minmax(90px,auto) 1fr;gap:4px 12px;font-size:14px}
+  .kv>.k{color:var(--mut)}
+  .kv>.v{word-break:break-word}
+  details{margin-top:8px}
+  summary{color:var(--acc);cursor:pointer;font-size:14px}
+  pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#0b0f13;padding:10px;border-radius:8px;max-height:360px;overflow:auto}
+  .err{color:var(--bad);font-size:14px}
+  .tblwrap{overflow-x:auto;margin-top:6px;max-height:420px;overflow-y:auto}
+  table{border-collapse:collapse;font-size:13px;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:top}
+  th{color:var(--mut);font-weight:600;position:sticky;top:0;background:var(--card)}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:90px;margin-top:10px}
+  .bars div{flex:1;background:var(--acc);border-radius:3px 3px 0 0;min-height:2px}
+  .bars-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--mut)}
+  .grp{margin:18px 0 4px;font-weight:700;font-size:15px}
+  .ep{padding:12px}
+  .ep .head{display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer}
+  .ep .body{margin-top:10px}
+  .ep .path{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut)}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .fields label{font-size:12px;color:var(--mut);display:block;margin-bottom:2px}
+  .fields input{width:100%}
+  .out{margin-top:10px}
+  a{color:var(--acc)}
+  footer{text-align:center;padding:20px;color:var(--mut);font-size:13px}
+  .hide{display:none}
+  .tag{font-size:11px;padding:2px 6px;border-radius:6px;background:#2a333d;color:var(--mut);margin-left:4px}
+  .chat{white-space:pre-wrap;line-height:1.5;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div>
+      <h1>🚗 HangiKapı</h1>
+      <div class="sub" id="lastUpd">Nakordoni verileri — hepsi tek yerde</div>
+    </div>
+    <div class="row">
+      <button class="sm" id="btnSettings" title="Ayarlar">⚙︎</button>
+      <button class="sm" id="btnDownload" title="Bu dosyayı indir">⬇︎ İndir</button>
+    </div>
+  </div>
+  <nav id="tabs">
+    <button class="sm on" data-tab="kapilar">🚧 Kapılar</button>
+    <button class="sm" data-tab="asistan">🤖 Asistan</button>
+    <button class="sm" data-tab="tum">📚 Tüm servisler</button>
+    <button class="sm" data-tab="hesap">📊 Hesap</button>
+  </nav>
+</header>
+
+<main>
+  <!-- AYARLAR -->
+  <div class="card hide" id="settings">
+    <div class="fields" style="grid-template-columns:1fr">
+      <div><label>hangikapi Worker adresi</label><input id="workerUrl" placeholder="https://hangikapi.xxx.workers.dev"></div>
+      <div><label>Takip edilen kapılar (virgülle, İngilizce yazımla)</label><input id="names"></div>
+      <div><label>Varsayılan konum (enlem, boylam)</label>
+        <div class="row"><input id="defLat" class="grow" placeholder="41.67"><input id="defLon" class="grow" placeholder="26.56">
+        <button class="sm" id="btnGeo">📍 Konumum</button></div></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="pri" id="btnSave">Kaydet</button>
+      <button class="sm" id="btnTest">Bağlantıyı test et</button>
+      <span id="testOut" class="sub"></span>
+    </div>
+  </div>
+
+  <!-- KAPILAR -->
+  <section id="tab-kapilar">
+    <div class="row" style="margin-top:8px">
+      <button class="sm" id="btnRefresh">↻ Yenile</button>
+      <span class="sub" id="activeInfo"></span>
+    </div>
+    <div id="cards"></div>
+  </section>
+
+  <!-- ASİSTAN -->
+  <section id="tab-asistan" class="hide">
+    <div class="card">
+      <b>🤖 Sınır asistanına sor</b>
+      <div class="sub" style="margin:4px 0 8px">Nakordoni'nin yapay zekâ asistanı. Seçili kapıyla ilgili soru sorabilirsin.</div>
+      <div class="row">
+        <select id="asPpid" class="grow"></select>
+      </div>
+      <textarea id="asQ" style="margin-top:8px;min-height:70px;font-family:inherit;font-size:15px" placeholder="Örn: Şu an Kapıkule'den mi Hamzabeyli'den mi geçmeliyim?"></textarea>
+      <div class="row" style="margin-top:8px"><button class="pri" id="btnAsk">Sor</button></div>
+      <div id="asOut" class="out"></div>
+    </div>
+  </section>
+
+  <!-- TÜM SERVİSLER -->
+  <section id="tab-tum" class="hide">
+    <div class="card">
+      <input id="filter" style="width:100%" placeholder="🔍 Servis ara (yakıt, döviz, tatil, rota…)">
+      <div class="sub" style="margin-top:6px">Alanlar örnek değerlerle dolu. Değiştirip <b>Getir</b>'e bas. <code>{ppid}</code> seçili kapıyla, <code>{lat}/{lon}</code> varsayılan konumla otomatik dolar.</div>
+    </div>
+    <div id="catalog"></div>
+  </section>
+
+  <!-- HESAP -->
+  <section id="tab-hesap" class="hide">
+    <div class="card">
+      <div class="row"><b class="grow">📊 Kota kullanımı</b><button class="sm" id="btnUsage">Getir</button></div>
+      <div id="usageOut" class="out"></div>
+    </div>
+    <div class="card">
+      <div class="row"><b class="grow">🩺 Servis durumu</b><button class="sm" id="btnStatus">Getir</button></div>
+      <div id="statusOut" class="out"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>
+  Ücretsiz plan: günde 1000 sorgu · tahmin/istatistik 200 · saniyede 2
+</footer>
+
+<script>
+(() => {
+  // ================= AYARLAR =================
+  const DEF = {
+    url: /^https?:$/.test(location.protocol) && /workers\.dev$/.test(location.hostname) ? location.origin : 'https://hangikapi.aydinoglucaglar83.workers.dev',
+    names: 'Kapikule,Hamzabeyli,Derekoy',
+    lat: '41.6771', lon: '26.5557' // Edirne
+  };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null || v === '' ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  const $ = id => document.getElementById(id);
+  const S = {
+    url: store.get('hk_url', DEF.url),
+    names: store.get('hk_names', DEF.names),
+    lat: store.get('hk_lat', DEF.lat),
+    lon: store.get('hk_lon', DEF.lon),
+    ppid: store.get('hk_ppid', ''),
+    checkpoints: []
+  };
+  $('workerUrl').value = S.url; $('names').value = S.names; $('defLat').value = S.lat; $('defLon').value = S.lon;
+
+  // ================= İSTEK =================
+  let lastCall = 0;
+  async function api(path, params, opts = {}) {
+    const wait = Math.max(0, lastCall + 550 - Date.now()); // saniyede ≤2 istek
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    lastCall = Date.now();
+    const qs = params ? '?' + String(params).replace(/^\?/, '') : '';
+    const url = S.url.replace(/\/+$/, '') + '/nk/' + path.replace(/^\/+/, '') + qs;
+    let res;
+    try { res = await fetch(url, opts); }
+    catch (e) { throw new Error("Worker'a ulaşılamadı. ⚙︎ ayarlardan adresi kontrol et. (" + e.message + ')'); }
+    const txt = await res.text();
+    let body; try { body = JSON.parse(txt); } catch (e) { body = { raw: txt }; }
+    if (!res.ok || body.ok === false) {
+      let m = body.error?.message || body.error || body.message || ('HTTP ' + res.status);
+      if (typeof m !== 'string') m = JSON.stringify(m);
+      if (/Izin verilmeyen/.test(m)) m += ' → Worker kodunu yeni sürümle güncelle.';
+      const err = new Error(m); err.body = body; err.status = res.status; throw err;
+    }
+    return body;
+  }
+
+  // ================= GÖRÜNTÜLEME =================
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const unwrap = b => (b && typeof b === 'object' && !Array.isArray(b) && 'data' in b) ? b.data : b;
+  const LABELS = {
+    queue:'Kuyruk', queue_length:'Kuyruk uzunluğu', wait:'Bekleme', wait_time:'Bekleme süresi', wait_minutes:'Bekleme (dk)',
+    status:'Durum', updated_at:'Güncelleme', checked_at:'Kontrol', name:'Ad', name_en:'Ad', country:'Ülke', city:'Şehir',
+    price:'Fiyat', currency:'Para birimi', buy:'Alış', sell:'Satış', rate:'Kur', date:'Tarih', distance_km:'Mesafe (km)',
+    address:'Adres', lat:'Enlem', lon:'Boylam', lng:'Boylam', title:'Başlık', type:'Tür', fuel_type:'Yakıt', answer:'Cevap',
+    temperature:'Sıcaklık', description:'Açıklama', holiday:'Tatil', duration:'Süre', total:'Toplam', ppid:'Kapı kodu'
+  };
+  const lbl = k => LABELS[k] || String(k).replace(/_/g, ' ');
+  function fmt(v) {
+    if (v == null) return '—';
+    if (typeof v === 'boolean') return v ? '✔︎' : '✘';
+    if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString('tr-TR') : (+v.toFixed(4)).toLocaleString('tr-TR');
+    if (typeof v === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) { const d = new Date(v); if (!isNaN(d)) return esc(d.toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })); }
+      if (/^https?:\/\//.test(v)) return '<a href="' + esc(v) + '" target="_blank" rel="noopener">' + esc(v.length > 40 ? v.slice(0, 40) + '…' : v) + '</a>';
+      return esc(v);
+    }
+    return esc(JSON.stringify(v));
+  }
+  function geoOf(o) {
+    const la = o.lat ?? o.latitude, lo = o.lon ?? o.lng ?? o.longitude;
+    return (la != null && lo != null && !isNaN(+la) && !isNaN(+lo)) ? [+la, +lo] : null;
+  }
+  const mapLink = g => '<a href="https://www.google.com/maps?q=' + g[0] + ',' + g[1] + '" target="_blank" rel="noopener">📍</a>';
+  const isPrim = v => v == null || typeof v !== 'object';
+
+  function render(d, depth = 0) {
+    if (isPrim(d)) return '<div class="chat">' + fmt(d) + '</div>';
+    if (depth > 6) return '<span class="sub">…</span>';
+    if (Array.isArray(d)) {
+      if (!d.length) return '<span class="sub">(boş liste)</span>';
+      if (d.every(isPrim)) {
+        const nums = d.filter(x => typeof x === 'number');
+        return (nums.length >= 6 && nums.length === d.length ? barsHtml(d, '') : '') + '<div>' + d.slice(0, 200).map(fmt).join(', ') + '</div>';
+      }
+      if (d.every(x => x && typeof x === 'object' && !Array.isArray(x))) return tableHtml(d, depth);
+      return '<ol>' + d.slice(0, 100).map(x => '<li>' + render(x, depth + 1) + '</li>').join('') + '</ol>';
+    }
+    // nesne
+    const g = geoOf(d);
+    const ent = Object.entries(d);
+    let h = '<div class="kv">';
+    for (const [k, v] of ent) {
+      if (isPrim(v)) h += '<div class="k">' + esc(lbl(k)) + '</div><div class="v">' + fmt(v) + '</div>';
+    }
+    if (g) h += '<div class="k">Harita</div><div class="v">' + mapLink(g) + ' Google Maps\'te aç</div>';
+    h += '</div>';
+    for (const [k, v] of ent) {
+      if (!isPrim(v)) {
+        const n = Array.isArray(v) ? ' (' + v.length + ')' : '';
+        h += '<details' + (depth < 1 ? ' open' : '') + '><summary>' + esc(lbl(k)) + n + '</summary><div style="padding-left:8px">' + render(v, depth + 1) + '</div></details>';
+      }
+    }
+    return h;
+  }
+  function tableHtml(rows, depth) {
+    const cols = [];
+    for (const r of rows.slice(0, 50)) for (const [k, v] of Object.entries(r)) if (isPrim(v) && !cols.includes(k)) cols.push(k);
+    const show = cols.filter(c => !/^(lat|lon|lng|latitude|longitude)$/i.test(c)).slice(0, 9);
+    const hasGeo = rows.some(geoOf);
+    const nested = rows.some(r => Object.values(r).some(v => !isPrim(v)));
+    const numCol = show.find(c => rows.length >= 6 && rows.every(r => typeof r[c] === 'number') && !/id$/i.test(c));
+    let h = numCol ? barsHtml(rows.map(r => r[numCol]), lbl(numCol)) : '';
+    h += '<div class="sub">' + rows.length + ' kayıt' + (rows.length > 150 ? ' (ilk 150 gösteriliyor)' : '') + '</div>';
+    h += '<div class="tblwrap"><table><thead><tr>' + (hasGeo ? '<th></th>' : '') + show.map(c => '<th>' + esc(lbl(c)) + '</th>').join('') + (nested ? '<th>detay</th>' : '') + '</tr></thead><tbody>';
+    for (const r of rows.slice(0, 150)) {
+      const g = geoOf(r);
+      h += '<tr>' + (hasGeo ? '<td>' + (g ? mapLink(g) : '') + '</td>' : '') + show.map(c => '<td>' + fmt(r[c]) + '</td>').join('');
+      if (nested) {
+        const sub = Object.fromEntries(Object.entries(r).filter(([, v]) => !isPrim(v)));
+        h += '<td>' + (Object.keys(sub).length ? '<details><summary>aç</summary>' + render(sub, depth + 1) + '</details>' : '') + '</td>';
+      }
+      h += '</tr>';
+    }
+    return h + '</tbody></table></div>';
+  }
+  function barsHtml(nums, label) {
+    const vals = nums.map(n => +n);
+    const max = Math.max(...vals.filter(n => !isNaN(n)), 1);
+    return '<div class="bars">' + vals.map((n, i) =>
+      '<div title="#' + (i + 1) + ': ' + (isNaN(n) ? '—' : Math.round(n * 10) / 10) + '" style="height:' + (isNaN(n) ? 0 : Math.max(2, n / max * 100)) + '%"></div>').join('') +
+      '</div><div class="bars-lbl"><span>ilk</span><span>' + esc(label) + '</span><span>son</span></div>';
+  }
+  function resultHtml(body) {
+    return render(unwrap(body)) + '<details><summary>Ham JSON</summary><pre>' + esc(JSON.stringify(body, null, 2)) + '</pre></details>';
+  }
+  function errHtml(e) {
+    return '<div class="err">⚠️ ' + esc(e.message) + '</div>' + (e.body ? '<details><summary>Ham cevap</summary><pre>' + esc(JSON.stringify(e.body, null, 2)) + '</pre></details>' : '');
+  }
+
+  // ================= YARDIMCILAR =================
+  function walk(o, fn, depth = 0) {
+    if (depth > 8 || o == null || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(x => walk(x, fn, depth + 1)); return; }
+    fn(o); Object.values(o).forEach(v => walk(v, fn, depth + 1));
+  }
+  function pick(o, patterns) {
+    let found;
+    walk(o, obj => {
+      if (found !== undefined) return;
+      for (const p of patterns) for (const [k, v] of Object.entries(obj))
+        if (p.test(k) && v != null && typeof v !== 'object') { found = v; return; }
+    });
+    return found;
+  }
+  function findCheckpoints(body) {
+    const out = [], seen = new Set();
+    walk(body, o => {
+      const id = o.ppid ?? (typeof o.id === 'string' && /^id_/.test(o.id) ? o.id : undefined);
+      if (id && !seen.has(String(id))) {
+        seen.add(String(id));
+        out.push({ ppid: String(id), name: o.name_en || o.name || o.title || o.query || String(id), country: o.country || o.country_to || '' });
+      }
+    });
+    return out;
+  }
+  function waitMinutes(q) {
+    const tries = [[/^wait_?min/i, 1], [/wait.*min/i, 1], [/wait.*hour|^wait_?h$/i, 60], [/wait.*sec/i, 1 / 60], [/^wait$|wait_?time|estimated_?wait/i, 1]];
+    for (const [re, f] of tries) { const v = pick(q, [re]); if (v != null && !isNaN(+v)) return +v * f; }
+    return null;
+  }
+  const pill = m => m == null ? '<span class="pill p-na">bilinmiyor</span>' : m < 30 ? '<span class="pill p-ok">sakin</span>' : m < 90 ? '<span class="pill p-mid">orta</span>' : '<span class="pill p-bad">yoğun</span>';
+  const fmtMin = m => m == null ? '—' : (m = Math.round(m)) < 60 ? m + ' dk' : Math.floor(m / 60) + ' sa ' + (m % 60) + ' dk';
+  function fillPpidSelects() {
+    const opts = S.checkpoints.map(c => '<option value="' + esc(c.ppid) + '"' + (c.ppid === S.ppid ? ' selected' : '') + '>' + esc(c.name) + ' (' + esc(c.ppid) + ')</option>').join('');
+    $('asPpid').innerHTML = '<option value="">— kapı seçme —</option>' + opts;
+    $('activeInfo').textContent = S.ppid ? 'Seçili kapı: ' + (S.checkpoints.find(c => c.ppid === S.ppid)?.name || S.ppid) : '';
+  }
+
+  // ================= KAPILAR SEKMESİ =================
+  async function loadCard(cp, el) {
+    el.innerHTML = '<b>' + esc(cp.name) + '</b> <span class="sub">' + esc(cp.ppid) + ' · yükleniyor…</span>';
+    try {
+      const body = await api('v1/data/queue', 'ppid=' + encodeURIComponent(cp.ppid));
+      const q = unwrap(body);
+      const min = waitMinutes(q);
+      const len = pick(q, [/queue_?len/i, /^length$/i, /^queue$/i, /count/i, /cars/i, /vehicles/i]);
+      const upd = pick(q, [/updated/i, /last_?update/i, /timestamp/i, /checked/i]);
+      el.innerHTML =
+        '<div class="row"><div class="grow"><b>' + esc(cp.name) + '</b>' + (cp.country ? ' <span class="sub">→ ' + esc(cp.country) + '</span>' : '') +
+        '<div class="sub">' + esc(cp.ppid) + (upd != null ? ' · ' + fmt(upd) : '') + '</div></div>' + pill(min) + '</div>' +
+        '<div class="row" style="margin-top:6px"><div class="big">' + fmtMin(min) + '</div><div class="sub">tahmini bekleme' + (len != null ? ' · kuyruk: ' + esc(len) : '') + '</div></div>' +
+        '<div class="row" style="margin-top:10px">' +
+          [['v1/data/queue-advanced', '⏱ Detaylı', ''], ['v1/data/forecast', '📈 Tahmin', '&prediction_steps=24'], ['v1/data/day-stats', '🕐 En iyi saat', '&lang=en'],
+           ['v1/data/alternatives', '🔀 Alternatif', ''], ['v1/data/weather', '🌦 Hava', '&lang=en'], ['v1/data/road-conditions', '🛣 Yol', '&lang=en'],
+           ['v1/data/stats', '📊 Saatlik', ''], ['v1/data/bus-carriers', '🚌 Otobüs', '&days=7'], ['v2/data/air-alerts', '🚨 Hava alarmı', '&radius_km=100']]
+            .map(([p, t, x]) => '<button class="sm" data-p="' + p + '" data-x="' + x + '">' + t + '</button>').join('') +
+        '</div><div class="extra out"></div>' +
+        '<details><summary>Canlı kuyruk verisi</summary>' + resultHtml(body) + '</details>';
+      el.querySelectorAll('button[data-p]').forEach(b => b.onclick = async () => {
+        const box = el.querySelector('.extra');
+        b.disabled = true; box.innerHTML = '<div class="sub">' + esc(b.textContent) + ' yükleniyor…</div>';
+        try { box.innerHTML = '<b>' + esc(b.textContent) + '</b>' + resultHtml(await api(b.dataset.p, 'ppid=' + encodeURIComponent(cp.ppid) + b.dataset.x)); }
+        catch (e) { box.innerHTML = errHtml(e); }
+        finally { b.disabled = false; }
+      });
+    } catch (e) {
+      el.innerHTML = '<b>' + esc(cp.name) + '</b> <span class="sub">' + esc(cp.ppid) + '</span>' + errHtml(e);
+    }
+  }
+  async function loadGates() {
+    $('cards').innerHTML = '<div class="card sub">Kapılar aranıyor…</div>';
+    try {
+      const body = await api('v1/data/search', 'name=' + encodeURIComponent(S.names) + '&lang=en');
+      S.checkpoints = findCheckpoints(body);
+      if (!S.checkpoints.length) { $('cards').innerHTML = '<div class="card"><div class="err">Kapı kodu bulunamadı. ⚙︎ ayarlardan isimleri kontrol et.</div>' + resultHtml(body) + '</div>'; return; }
+    } catch (e) { $('cards').innerHTML = '<div class="card">' + errHtml(e) + '</div>'; return; }
+    if (!S.ppid || !S.checkpoints.some(c => c.ppid === S.ppid)) S.ppid = S.checkpoints[0].ppid;
+    fillPpidSelects();
+    $('cards').innerHTML = '';
+    for (const cp of S.checkpoints) {
+      const el = document.createElement('div'); el.className = 'card';
+      el.onclick = ev => { if (ev.target.closest('button,a,summary')) return; S.ppid = cp.ppid; store.set('hk_ppid', cp.ppid); fillPpidSelects(); };
+      $('cards').appendChild(el);
+      await loadCard(cp, el);
+    }
+    $('lastUpd').textContent = 'Son yenileme: ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ================= ASİSTAN =================
+  $('btnAsk').onclick = async () => {
+    const q = $('asQ').value.trim(); if (!q) return;
+    const pp = $('asPpid').value;
+    $('btnAsk').disabled = true; $('asOut').innerHTML = '<div class="sub">düşünüyor…</div>';
+    try {
+      const b = await api('v1/data/assistant', 'q=' + encodeURIComponent(q) + '&lang=tr' + (pp ? '&ppid=' + encodeURIComponent(pp) : ''));
+      const d = unwrap(b);
+      const ans = typeof d === 'string' ? d : pick(d, [/^answer$/i, /^reply$/i, /^text$/i, /^message$/i, /response/i, /content/i]);
+      $('asOut').innerHTML = (ans ? '<div class="card chat" style="margin:0">' + esc(ans) + '</div>' : '') + '<details><summary>Tüm cevap</summary>' + resultHtml(b) + '</details>';
+    } catch (e) { $('asOut').innerHTML = errHtml(e); }
+    finally { $('btnAsk').disabled = false; }
+  };
+
+  // ================= TÜM SERVİSLER KATALOĞU =================
+  // [grup, başlık, yol, sorgu parametreleri, yöntem, POST gövdesi]
+  const CATALOG = [
+    ['🚧 Sınır ve kapılar', 'Kapı listesi (791 kapı)', 'v1/data/checkpoints', ''],
+    ['🚧 Sınır ve kapılar', 'Kapı ara', 'v1/data/search', 'name=Kapikule,Hamzabeyli,Derekoy,Ipsala,Pazarkule&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Çoklu kapı (tek sorguda)', 'v1/data/multi', 'ppids={ppid}&include=queue,update-info&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Sınır hattı kuyruğu', 'v1/data/border/1/2/4', ''],
+    ['🚧 Sınır ve kapılar', 'Canlı kuyruk', 'v1/data/queue', 'ppid={ppid}'],
+    ['🚧 Sınır ve kapılar', 'Detaylı bekleme süresi', 'v1/data/queue-advanced', 'ppid={ppid}'],
+    ['🚧 Sınır ve kapılar', 'Veri tazeliği', 'v1/data/update-info', 'ppid={ppid}'],
+    ['🚧 Sınır ve kapılar', 'Saatlik istatistik', 'v1/data/stats', 'ppid={ppid}&date={today}'],
+    ['🚧 Sınır ve kapılar', 'En iyi geçiş saati', 'v1/data/day-stats', 'ppid={ppid}&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Bekleme tahmini (24 sa / 168 sa)', 'v1/data/forecast', 'ppid={ppid}&prediction_steps=24'],
+    ['🚧 Sınır ve kapılar', 'Alternatif kapılar', 'v1/data/alternatives', 'ppid={ppid}'],
+    ['🚧 Sınır ve kapılar', 'Kapıda hava durumu', 'v1/data/weather', 'ppid={ppid}&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Yol durumu', 'v1/data/road-conditions', 'ppid={ppid}&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Otobüs firmaları istatistiği', 'v1/data/bus-carriers', 'ppid={ppid}&days=7'],
+    ['🚧 Sınır ve kapılar', 'Sınır yolculuk matrisi', 'v1/data/travel-matrix', 'origin_lat=41.0082&origin_lon=28.9784&type=car&dest=BG&lang=en'],
+    ['🚧 Sınır ve kapılar', 'Hava saldırısı alarmı yakınlığı', 'v2/data/air-alerts', 'ppid={ppid}&radius_km=100'],
+
+    ['⛽ Akaryakıt', 'AB akaryakıt fiyatları', 'v1/data/fuel', 'country=BG'],
+    ['⛽ Akaryakıt', 'Şehirlere göre yakıt fiyatı', 'v1/data/fuel-cities', 'country=BG&fuel_type=diesel&lang=en'],
+    ['⛽ Akaryakıt', 'Yakındaki benzinlikler', 'v2/data/fuel-stations', 'lat={lat}&lon={lon}&radius_km=20&fuel_type=diesel'],
+    ['⛽ Akaryakıt', 'En ucuz benzinlik', 'v2/data/fuel-cheapest', 'city=Svilengrad&country=BG&radius_km=30&fuel_type=diesel'],
+    ['⛽ Akaryakıt', 'Yakıt türü isimleri', 'v2/data/fuel-grades', 'country=BG'],
+    ['⛽ Akaryakıt', 'Bulunduğun yerdeki yakıt fiyatı', 'v2/data/fuel-local', 'lat={lat}&lon={lon}&lang=en'],
+    ['⛽ Akaryakıt', 'Yakıt fiyatı bildir (test)', 'v2/data/fuel-report', 'dry=true', 'POST', '{\n  "station_id": "",\n  "fuel_type": "diesel",\n  "price": 0\n}'],
+
+    ['🛏 Şoför hizmetleri', 'Şoför noktaları (POI)', 'v1/data/pois', 'lat={lat}&lon={lon}&radius=20'],
+    ['🛏 Şoför hizmetleri', 'Tır parkları', 'v2/data/truck-parkings', 'city=Edirne&country=TR&radius=30'],
+    ['🛏 Şoför hizmetleri', 'Yakındaki marketler', 'v2/data/shops', 'city=Edirne&country=TR&radius=10'],
+    ['🛏 Şoför hizmetleri', 'Ücretsiz duşlar', 'v2/data/showers', 'lat={lat}&lon={lon}&radius=30'],
+    ['🛏 Şoför hizmetleri', 'Şoför restoranları', 'v2/data/restaurants', 'city=Edirne&country=TR&radius=10'],
+    ['🛏 Şoför hizmetleri', 'Sanayi bölgeleri', 'v2/data/industrial', 'city=Edirne&country=TR&radius=20'],
+    ['🛏 Şoför hizmetleri', 'İnternet noktaları', 'v2/data/internet-points', 'lat={lat}&lon={lon}'],
+    ['🛏 Şoför hizmetleri', 'Vinyet ve otoyol ücretleri', 'v2/data/vignettes', 'country=BG'],
+    ['🛏 Şoför hizmetleri', 'Mekân yorumu gönder', 'v2/data/poi-opinion', '', 'POST', '{\n  "ext_source": "",\n  "ext_id": "",\n  "user_ref": "",\n  "client_upload_id": "",\n  "action": ""\n}'],
+
+    ['💱 Döviz', 'Döviz kurları (tam tablo)', 'v1/data/currency', ''],
+    ['💱 Döviz', 'Döviz bürosu olan şehirler', 'v2/data/exchange-cities', 'lang=en'],
+    ['💱 Döviz', 'Döviz büroları', 'v2/data/exchange-offices', 'city=Sofia&currency=EUR&open_now=1'],
+    ['💱 Döviz', 'Tek büronun kurları', 'v2/data/exchange-office', 'id='],
+    ['💱 Döviz', 'En iyi kurlar', 'v2/data/exchange-best-rates', 'city=Sofia&currency=EUR&limit=10'],
+    ['💱 Döviz', 'Kur geçmişi', 'v2/data/exchange-history', 'city=Sofia&currency=EUR&days=30'],
+
+    ['📅 Kurallar ve tatiller', 'Tır trafik yasakları', 'v1/data/truck-bans', 'country=TR,BG,RS'],
+    ['📅 Kurallar ve tatiller', 'Açık pazar günleri', 'v1/data/trading-sundays', 'country=PL'],
+    ['📅 Kurallar ve tatiller', 'Tatil takvimi (karşılaştırmalı)', 'v1/data/holiday-calendar', 'country=TR&compare_to=BG&year={year}&lang=en'],
+    ['📅 Kurallar ve tatiller', 'Resmi tatiller', 'v2/data/holiday-calendar/holidays', 'country=TR&year={year}&lang=en'],
+    ['📅 Kurallar ve tatiller', 'İş günü hesabı', 'v2/data/holiday-calendar/business-days', 'op=count&country=TR&start_date={today}&end_date={year}-12-31'],
+    ['📅 Kurallar ve tatiller', 'Ülke bilgisi', 'v2/data/holiday-calendar/countries', 'country=TR'],
+    ['📅 Kurallar ve tatiller', 'Tatillerin iş etkisi', 'v2/data/holiday-calendar/impact', 'op=summary&country=TR&year={year}'],
+
+    ['🗺 Rota', 'Rota planlayıcı', 'v2/data/route-plan', 'origin_lat=41.0082&origin_lon=28.9784&dest_lat=42.6977&dest_lon=23.3219&vehicle=car&lang=en'],
+    ['🗺 Rota', 'Tır rotası', 'v2/data/truck-route', 'from=41.0082,28.9784&to=42.6977,23.3219&weight=40&height=4&axles=5'],
+    ['🗺 Rota', 'Tır otoyol maliyeti', 'v2/data/toll-cost', '', 'POST', '{\n  "from": "41.0082,28.9784",\n  "to": "42.6977,23.3219",\n  "vehicle": "truck"\n}'],
+    ['🗺 Rota', 'Karavan rotası', 'v2/data/motorhome-route', 'from=41.0082,28.9784&to=42.6977,23.3219'],
+    ['🗺 Rota', 'Hat maliyet endeksi', 'v2/data/lane-cost-index', 'from=TR&to=BG&vehicle=truck'],
+    ['🗺 Rota', 'Piyasa navlun fiyatı', 'v2/data/market-rate', 'from=TR&to=BG&vehicle=truck'],
+
+    ['🌳 Gölge ve serin yerler', 'Gölgeli yürüyüş rotası', 'v2/data/shade-route', 'from=40.9700,29.0600&to=40.9650,29.0750'],
+    ['🌳 Gölge ve serin yerler', 'Gölge haritası', 'v2/data/shade-grid', 'bbox=29.05,40.96,29.08,40.98'],
+    ['🌳 Gölge ve serin yerler', 'Gölgeli yürüyüş saatleri', 'v2/data/shade-windows', 'from=40.9700,29.0600&to=40.9650,29.0750'],
+    ['🌳 Gölge ve serin yerler', 'Köpekler için serin yerler', 'v2/data/dog-cool-spots', 'lat={lat}&lon={lon}'],
+    ['🌳 Gölge ve serin yerler', 'Yürüyüş boyunca köpek serin yerleri', 'v2/data/dog-cool-spots-route', 'polyline6='],
+    ['🌳 Gölge ve serin yerler', 'Rota boyunca serin yerler', 'v2/data/route-cool-spots', 'polyline6='],
+
+    ['🚌 Otobüs', 'Otobüste güneş hangi tarafta', 'v2/data/bus-sun-side', 'from=41.0082,28.9784&to=41.6771,26.5557&date={today}&lang=en'],
+    ['🚌 Otobüs', 'Otobüs modelleri kataloğu', 'v2/data/bus-sun-catalog', ''],
+
+    ['🚛 Filo (NakBus)', 'Filo araçları', 'v2/data/fleet/vehicles', ''],
+    ['🚛 Filo (NakBus)', 'Canlı konumlar', 'v2/data/fleet/live', ''],
+    ['🚛 Filo (NakBus)', 'Konum geçmişi', 'v2/data/fleet/history', 'vehicle_id=&limit=50'],
+    ['🚛 Filo (NakBus)', 'Sürüş süresi limitleri', 'v2/data/fleet/compliance/limits', 'ruleset=EU561'],
+    ['🚛 Filo (NakBus)', 'Sürüş kaydı doğrula', 'v2/data/fleet/compliance/validate', '', 'POST', '{\n}'],
+    ['🚛 Filo (NakBus)', 'Sefer planı kontrol', 'v2/data/fleet/compliance/plan-check', '', 'POST', '{\n}'],
+
+    ['🤖 Yapay zekâ', 'Sınır asistanı', 'v1/data/assistant', 'q=Kapıkule\'de şu an bekleme ne kadar?&lang=tr&ppid={ppid}'],
+    ['🤖 Yapay zekâ', 'Kişisel asistan', 'v2/data/assistant-custom', 'assistant_id=&q=Merhaba&ppid={ppid}&lang=tr'],
+    ['🤖 Yapay zekâ', 'Plaka tanıma (foto)', 'v2/data/plate-recognition', '', 'IMAGE']
+  ];
+
+  function fillTokens(s) {
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    return s.replace(/\{ppid\}/g, S.ppid || '').replace(/\{lat\}/g, S.lat).replace(/\{lon\}/g, S.lon)
+            .replace(/\{today\}/g, today).replace(/\{year\}/g, String(now.getFullYear()));
+  }
+  function parseParams(str) {
+    const out = [];
+    for (const part of str.split('&')) { if (!part) continue; const i = part.indexOf('='); out.push(i < 0 ? [part, ''] : [part.slice(0, i), part.slice(i + 1)]); }
+    return out;
+  }
+  function buildCatalog() {
+    let html = '', lastGrp = '';
+    CATALOG.forEach(([grp, title, path, params, method], i) => {
+      if (grp !== lastGrp) { html += '<div class="grp" data-grp="' + esc(grp) + '">' + esc(grp) + '</div>'; lastGrp = grp; }
+      html += '<div class="card ep" data-i="' + i + '" data-s="' + esc((grp + ' ' + title + ' ' + path).toLowerCase()) + '">' +
+        '<div class="head"><div><b>' + esc(title) + '</b>' + (method ? '<span class="tag">' + (method === 'IMAGE' ? 'FOTO' : method) + '</span>' : '') +
+        '<div class="path">/' + esc(path) + '</div></div><span class="sub">▸</span></div><div class="body hide"></div></div>';
+    });
+    $('catalog').innerHTML = html;
+    $('catalog').querySelectorAll('.ep .head').forEach(h => h.onclick = () => openEp(h.parentElement));
+  }
+  function openEp(card) {
+    const body = card.querySelector('.body');
+    const arrow = card.querySelector('.head .sub');
+    if (!body.classList.contains('hide')) { body.classList.add('hide'); arrow.textContent = '▸'; return; }
+    arrow.textContent = '▾'; body.classList.remove('hide');
+    if (body.dataset.built) return;
+    body.dataset.built = '1';
+    const [, , path, params, method, postBody] = CATALOG[+card.dataset.i];
+    const fields = parseParams(fillTokens(params || ''));
+    let h = '<div class="fields">' + fields.map(([k, v]) =>
+      '<div><label>' + esc(k) + '</label><input data-k="' + esc(k) + '" value="' + esc(decodeURIComponent(v.replace(/\+/g, ' '))) + '"></div>').join('') + '</div>';
+    h += '<details><summary>+ parametre ekle</summary><input class="extraP" style="width:100%;margin-top:6px" placeholder="anahtar=değer&anahtar2=değer2"></details>';
+    if (method === 'POST') h += '<label class="sub" style="display:block;margin-top:8px">JSON gövdesi</label><textarea class="pbody">' + esc(postBody || '{}') + '</textarea>';
+    if (method === 'IMAGE') h += '<div style="margin-top:8px"><label class="sub">Plaka fotoğrafı</label><input type="file" accept="image/*" capture="environment" class="pimg" style="width:100%"></div>';
+    h += '<div class="row" style="margin-top:10px"><button class="pri go">Getir</button><span class="sub">/' + esc(path) + '</span></div><div class="out"></div>';
+    body.innerHTML = h;
+    body.querySelector('.go').onclick = () => runEp(card, path, method);
+  }
+  async function runEp(card, path, method) {
+    const body = card.querySelector('.body'), out = body.querySelector('.out'), btn = body.querySelector('.go');
+    const qs = new URLSearchParams();
+    body.querySelectorAll('input[data-k]').forEach(inp => { if (inp.value.trim() !== '') qs.append(inp.dataset.k, inp.value.trim()); });
+    const extra = body.querySelector('.extraP').value.trim();
+    if (extra) for (const [k, v] of parseParams(extra.replace(/^\?/, ''))) qs.append(k, decodeURIComponent(v));
+    let opts = {};
+    try {
+      if (method === 'POST') {
+        const t = body.querySelector('.pbody').value;
+        try { JSON.parse(t); } catch (e) { throw new Error('JSON gövdesi hatalı: ' + e.message); }
+        opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: t };
+      } else if (method === 'IMAGE') {
+        const f = body.querySelector('.pimg').files[0];
+        if (!f) throw new Error('Önce bir fotoğraf seç.');
+        const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+        opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_base64: b64 }) };
+      }
+      btn.disabled = true; out.innerHTML = '<div class="sub">yükleniyor…</div>';
+      const res = await api(path, qs.toString(), opts);
+      out.innerHTML = resultHtml(res);
+    } catch (e) { out.innerHTML = errHtml(e); }
+    finally { btn.disabled = false; }
+  }
+  $('filter').oninput = () => {
+    const q = $('filter').value.toLowerCase().trim();
+    const visible = new Set();
+    $('catalog').querySelectorAll('.ep').forEach(c => {
+      const show = !q || c.dataset.s.includes(q);
+      c.classList.toggle('hide', !show);
+      if (show) visible.add(CATALOG[+c.dataset.i][0]);
+    });
+    $('catalog').querySelectorAll('.grp').forEach(g => g.classList.toggle('hide', !visible.has(g.dataset.grp)));
+  };
+
+  // ================= HESAP =================
+  $('btnUsage').onclick = async () => {
+    $('usageOut').innerHTML = '<div class="sub">yükleniyor…</div>';
+    try { $('usageOut').innerHTML = resultHtml(await api('v2/account/usage')); } catch (e) { $('usageOut').innerHTML = errHtml(e); }
+  };
+  $('btnStatus').onclick = async () => {
+    $('statusOut').innerHTML = '<div class="sub">yükleniyor…</div>';
+    try {
+      const b = await api('v1/data/status');
+      const d = unwrap(b), s = d?.summary, prods = d?.products || {};
+      const rows = Object.entries(prods).map(([k, v]) => ({ servis: v.title || k, durum: v.status, 'gecikme (ms)': v.latency_ms, detay: v.detail }));
+      rows.sort((a, b) => (a.durum === 'online') - (b.durum === 'online'));
+      $('statusOut').innerHTML = (s ? '<div class="big">' + s.online + '/' + s.total + '</div><div class="sub">servis çalışıyor · ' + (s.offline || 0) + ' kapalı</div>' : '') +
+        (rows.length ? tableHtml(rows, 0) : '') + '<details><summary>Ham JSON</summary><pre>' + esc(JSON.stringify(b, null, 2)) + '</pre></details>';
+    } catch (e) { $('statusOut').innerHTML = errHtml(e); }
+  };
+
+  // ================= OLAYLAR =================
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => {
+    $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    ['kapilar', 'asistan', 'tum', 'hesap'].forEach(t => $('tab-' + t).classList.toggle('hide', t !== b.dataset.tab));
+    if (b.dataset.tab === 'tum' && !$('catalog').innerHTML) buildCatalog();
+  });
+  $('btnRefresh').onclick = loadGates;
+  $('btnSettings').onclick = () => $('settings').classList.toggle('hide');
+  $('btnSave').onclick = () => {
+    S.url = $('workerUrl').value.trim() || DEF.url; S.names = $('names').value.trim() || DEF.names;
+    S.lat = $('defLat').value.trim() || DEF.lat; S.lon = $('defLon').value.trim() || DEF.lon;
+    store.set('hk_url', S.url); store.set('hk_names', S.names); store.set('hk_lat', S.lat); store.set('hk_lon', S.lon);
+    $('settings').classList.add('hide');
+    $('catalog').innerHTML = ''; // konum değişmiş olabilir, katalog yeniden kurulsun
+    if (!$('tab-tum').classList.contains('hide')) buildCatalog();
+    loadGates();
+  };
+  $('btnGeo').onclick = () => {
+    if (!navigator.geolocation) { alertBox('Bu tarayıcı konum vermiyor.'); return; }
+    $('btnGeo').textContent = '…';
+    navigator.geolocation.getCurrentPosition(p => {
+      $('defLat').value = p.coords.latitude.toFixed(5); $('defLon').value = p.coords.longitude.toFixed(5); $('btnGeo').textContent = '📍 Konumum';
+    }, e => { $('btnGeo').textContent = '📍 Konumum'; $('testOut').textContent = 'Konum alınamadı: ' + e.message; }, { timeout: 10000 });
+  };
+  function alertBox(m) { $('testOut').textContent = m; }
+  $('btnTest').onclick = async () => {
+    const old = S.url; S.url = $('workerUrl').value.trim() || DEF.url;
+    $('testOut').textContent = 'deneniyor…';
+    try { const b = await api('v1/data/status'); const s = b.data?.summary; $('testOut').textContent = '✅ Bağlandı' + (s ? ' — ' + s.online + '/' + s.total + ' servis çalışıyor' : ''); }
+    catch (e) { S.url = old; $('testOut').textContent = '❌ ' + e.message; }
+  };
+  $('btnDownload').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' }));
+    a.download = 'hangikapi.html';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  // İndirme için sayfanın orijinal hâlini (açılmış kartlar olmadan) sakla
+  const SOURCE = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  loadGates();
+})();
+</script>
+</body>
+</html>
