@@ -300,13 +300,24 @@
   }
   function findCheckpoints(body) {
     const out = [], seen = new Set();
+    const add = (id, o) => {
+      id = String(id);
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      const name = o.name_en || o.name || o.title || o.title_en || o.name_ua || o.query || o.label || id;
+      out.push({ ppid: id, name: typeof name === 'object' ? (name.en || Object.values(name)[0]) : name,
+                 country: o.country || o.country_to || o.country_code || '', txt: JSON.stringify(o).toLowerCase() });
+    };
     walk(body, o => {
-      const id = o.ppid ?? (typeof o.id === 'string' && /^id_/.test(o.id) ? o.id : undefined);
-      if (id && !seen.has(String(id))) {
-        seen.add(String(id));
-        out.push({ ppid: String(id), name: o.name_en || o.name || o.title || o.query || String(id), country: o.country || o.country_to || '',
-                   txt: JSON.stringify(o).toLowerCase() });
-      }
+      // Biçim A: { ppid: "id_13", name: ... }
+      const id = o.ppid ?? o.pp_id ?? o.checkpoint_id ?? (typeof o.id === 'string' && /^id_\d+$/.test(o.id) ? o.id : undefined);
+      if (id != null && (o.name || o.name_en || o.title || o.lat != null || o.country)) add(/^\d+$/.test(String(id)) ? 'id_' + id : id, o);
+      // Biçim B: { "id_13": { name: ... }, "id_14": {...} }
+      for (const [k, v] of Object.entries(o)) if (/^id_\d+$/.test(k) && v && typeof v === 'object' && !Array.isArray(v)) add(k, v);
+    });
+    // Biçim C: sayısal id'li kapı nesneleri
+    if (!out.length) walk(body, o => {
+      if (typeof o.id === 'number' && (o.name || o.name_en || o.title) && (o.lat != null || o.country)) add('id_' + o.id, o);
     });
     return out;
   }
@@ -390,6 +401,7 @@
             (trbg.length ? '<div class="sub" style="margin:6px 0">Türkiye/Bulgaristan ile ilgili bulunan kapılar — birine dokun:</div>' +
               trbg.map(c => '<button class="sm" style="margin:3px" data-pp="' + esc(c.ppid) + '">' + esc(c.name) + '</button>').join('')
               : '<div class="sub" style="margin-top:6px">Listede Türkiye/Bulgaristan kapısı görünmüyor. Nakordoni bu sınırı kapsamıyor olabilir.</div>') +
+            '<details open><summary>Ham cevabın başı (bana bunu gönder)</summary><pre>' + esc(JSON.stringify(all).slice(0, 1500)) + '</pre></details>' +
             '<details><summary>Tüm kapı listesi</summary>' + resultHtml(all) + '</details></div>';
           $('cards').querySelectorAll('button[data-pp]').forEach(b => b.onclick = () => {
             const c = trbg.find(x => x.ppid === b.dataset.pp); S.checkpoints = [c]; S.ppid = c.ppid; store.set('hk_ppid', c.ppid); fillPpidSelects();
