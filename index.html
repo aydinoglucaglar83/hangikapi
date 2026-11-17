@@ -123,11 +123,12 @@
     gates: [] // bulunan kapılar
   };
   const GATES = [
-    { key: 'kapikule', label: 'Kapıkule', terms: ['kapikule', 'kapitan andreevo', 'andreevo'] },
-    { key: 'hamzabeyli', label: 'Hamzabeyli', terms: ['hamzabeyli', 'lesovo'] },
-    { key: 'derekoy', label: 'Dereköy', terms: ['derekoy', 'malko tarnovo'] },
-    { key: 'ipsala', label: 'İpsala', terms: ['ipsala', 'kipoi', 'kipi'] },
-    { key: 'pazarkule', label: 'Pazarkule', terms: ['pazarkule', 'kastanies'] }
+    // nakordoni kapı kodları (17.11.2026'da doğrulandı, hepsi binek araç geçişi)
+    { key: 'kapikule', label: 'Kapıkule', ppid: 'id_384', other: 'Kapitan Andreevo 🇧🇬' },
+    { key: 'hamzabeyli', label: 'Hamzabeyli', ppid: 'id_386', other: 'Lesovo 🇧🇬' },
+    { key: 'derekoy', label: 'Dereköy', ppid: 'id_388', other: 'Malko Tarnovo 🇧🇬' },
+    { key: 'ipsala', label: 'İpsala', ppid: 'id_487', other: 'Kipi 🇬🇷' },
+    { key: 'pazarkule', label: 'Pazarkule', ppid: 'id_901', other: 'Kastanies 🇬🇷' }
   ];
   const view = document.getElementById('view');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -234,30 +235,10 @@
   }
 
   // ============ KAPILARI BUL ============
+  // Kapı kodları sabit: isim aramasına ve ekstra sorguya gerek yok
   async function findGates() {
-    if (S.gates.length) return S.gates;
-    const terms = GATES.flatMap(g => g.terms);
-    const out = [];
-    const take = (o, id) => {
-      const txt = JSON.stringify(o).toLowerCase();
-      const g = GATES.find(g => g.terms.some(t => txt.includes(t)));
-      if (g && !out.some(x => x.ppid === id)) out.push({ ppid: id, label: g.label, key: g.key, car: /"car"|\bcars?\b|passenger/i.test(txt) });
-    };
-    const scan = body => walk(body, o => {
-      const id = o.ppid ?? (typeof o.id === 'string' && /^id_\d+$/.test(o.id) ? o.id : null);
-      if (id) take(o, String(id));
-      for (const [k, v] of Object.entries(o)) if (/^id_\d+$/.test(k) && v && typeof v === 'object') take(v, k);
-    });
-    const s = await api('v4/data/search', 'name=' + encodeURIComponent(terms.slice(0, 20).join(',')) + '&lang=en');
-    scan(s);
-    if (!out.length) {
-      const all = await api('v4/data/checkpoints');
-      scan(all);
-      if (!out.length && /outside your approved countries/i.test(JSON.stringify(all))) throw friendly('country');
-    }
-    out.sort((a, b) => GATES.findIndex(g => g.key === a.key) - GATES.findIndex(g => g.key === b.key));
-    S.gates = out;
-    return out;
+    if (!S.gates.length) S.gates = GATES.map(g => ({ ppid: g.ppid, label: g.label, key: g.key, other: g.other, car: true }));
+    return S.gates;
   }
 
   // ============ ANA EKRAN ============
@@ -329,7 +310,7 @@
     } catch (e) { el.innerHTML = '<div class="t">' + esc(g.label) + '</div>' + errBox(e); return; }
     const [cls, word] = level(m);
     el.innerHTML =
-      '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + '</div>' +
+      '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + (g.other ? ' <span class="muted" style="font-size:13px;font-weight:500">↔ ' + esc(g.other) + '</span>' : '') + '</div>' +
       '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + (g.carOnly ? ' otomobil' : ' araç') : '') + (upd ? ' · ' + esc(upd) : '') + '</div></div>' +
       '<span class="pill ' + cls + '">' + word + '</span></div>' +
       '<div class="big" style="margin:8px 0 4px">' + fmtMin(m) + '</div><div class="muted">tahmini bekleme · ' + (g.carOnly ? '🚗 binek araç' : 'tüm araçlar') + '</div>' +
