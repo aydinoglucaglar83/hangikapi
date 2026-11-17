@@ -126,11 +126,11 @@
   const GATES = [
     // nakordoni kapı kodları (17.11.2026'da doğrulandı, hepsi binek araç geçişi)
     // out = Türkiye'den çıkış (TR tarafı), in = Türkiye'ye giriş (komşu taraf)
-    { key: 'kapikule', label: 'Kapıkule', out: 'id_385', in: 'id_384', other: 'Kapitan Andreevo', flag: '🇧🇬' },
-    { key: 'hamzabeyli', label: 'Hamzabeyli', out: 'id_387', in: 'id_386', other: 'Lesovo', flag: '🇧🇬' },
-    { key: 'derekoy', label: 'Dereköy', out: 'id_389', in: 'id_388', other: 'Malko Tarnovo', flag: '🇧🇬' },
-    { key: 'ipsala', label: 'İpsala', out: 'id_486', in: 'id_487', other: 'Kipi', flag: '🇬🇷' },
-    { key: 'pazarkule', label: 'Pazarkule', out: 'id_900', in: 'id_901', other: 'Kastanies', flag: '🇬🇷' }
+    { key: 'kapikule', lat: 41.7185, lon: 26.356, label: 'Kapıkule', out: 'id_385', in: 'id_384', other: 'Kapitan Andreevo', flag: '🇧🇬' },
+    { key: 'hamzabeyli', lat: 41.97, lon: 26.54, label: 'Hamzabeyli', out: 'id_387', in: 'id_386', other: 'Lesovo', flag: '🇧🇬' },
+    { key: 'derekoy', lat: 41.968, lon: 27.355, label: 'Dereköy', out: 'id_389', in: 'id_388', other: 'Malko Tarnovo', flag: '🇧🇬' },
+    { key: 'ipsala', lat: 40.937, lon: 26.325, label: 'İpsala', out: 'id_486', in: 'id_487', other: 'Kipi', flag: '🇬🇷' },
+    { key: 'pazarkule', lat: 41.656, lon: 26.525, label: 'Pazarkule', out: 'id_900', in: 'id_901', other: 'Kastanies', flag: '🇬🇷' }
   ];
   const view = document.getElementById('view');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -245,7 +245,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 22 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 23 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -406,15 +406,56 @@
     draw();
     return true;
   }
+  // ============ HAVA (Open-Meteo, anahtarsız) + nakordoni yol uyarısı ============
+  const WMO = { 0: ['☀️', 'Açık'], 1: ['🌤', 'Az bulutlu'], 2: ['⛅', 'Parçalı bulutlu'], 3: ['☁️', 'Kapalı'], 45: ['🌫', 'Sis'], 48: ['🌫', 'Kırağılı sis'],
+    51: ['🌦', 'Hafif çisenti'], 53: ['🌦', 'Çisenti'], 55: ['🌧', 'Yoğun çisenti'], 56: ['🌧', 'Donan çisenti'], 57: ['🌧', 'Donan çisenti'],
+    61: ['🌦', 'Hafif yağmur'], 63: ['🌧', 'Yağmur'], 65: ['🌧', 'Kuvvetli yağmur'], 66: ['🌧', 'Donan yağmur'], 67: ['🌧', 'Donan yağmur'],
+    71: ['🌨', 'Hafif kar'], 73: ['🌨', 'Kar'], 75: ['❄️', 'Yoğun kar'], 77: ['🌨', 'Kar taneleri'], 80: ['🌦', 'Sağanak'], 81: ['🌧', 'Sağanak'], 82: ['⛈', 'Şiddetli sağanak'],
+    85: ['🌨', 'Kar sağanağı'], 86: ['❄️', 'Yoğun kar sağanağı'], 95: ['⛈', 'Gök gürültülü fırtına'], 96: ['⛈', 'Dolulu fırtına'], 99: ['⛈', 'Dolulu fırtına'] };
+  const wmo = (c, day) => { const w = WMO[c] || ['🌡', '—']; return day === 0 && c <= 2 ? [c === 0 ? '🌙' : '☁️', c === 0 ? 'Açık' : w[1]] : w; };
+  const windFrom = d => d == null ? '' : ['Kuzeyden', 'Kuzeydoğudan', 'Doğudan', 'Güneydoğudan', 'Güneyden', 'Güneybatıdan', 'Batıdan', 'Kuzeybatıdan'][Math.round(((+d % 360) + 360) % 360 / 45) % 8];
+  async function wxView(g, box) {
+    const G = GATES.find(x => x.key === g.key);
+    if (!G || G.lat == null) { box.innerHTML = '<div class="muted" style="margin-top:12px">Bu kapının konumu bilinmiyor.</div>'; return; }
+    const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + G.lat + '&longitude=' + G.lon +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility' +
+      '&hourly=temperature_2m,precipitation_probability,weather_code,is_day&forecast_days=2&timezone=auto&wind_speed_unit=kmh';
+    const roadP = api('v4/data/weather', 'ppid=' + g.ppid + '&lang=tr').then(data).catch(() => null);
+    let w;
+    try { const r = await fetch(u); if (!r.ok) throw 0; w = await r.json(); }
+    catch (e) { box.innerHTML = '<div class="err" style="margin-top:12px">Hava durumu alınamadı. Bağlantını kontrol edip tekrar dene.</div>'; return; }
+    const c = w.current || {}, [ic, txt] = wmo(c.weather_code, c.is_day);
+    const H = w.hourly || {}, now = (c.time || '').slice(0, 13);
+    let start = (H.time || []).findIndex(t => t.slice(0, 13) >= now); if (start < 0) start = 0;
+    const hours = (H.time || []).slice(start, start + 12).map((t, i) => ({ t: t.slice(11, 16), temp: H.temperature_2m[start + i], p: H.precipitation_probability ? H.precipitation_probability[start + i] : null, code: H.weather_code[start + i], day: H.is_day ? H.is_day[start + i] : 1 }));
+    const r = v => v == null ? '—' : Math.round(v);
+    const vis = c.visibility != null && c.visibility < 1000 ? '<div class="info" style="margin-top:10px">🌫 Görüş mesafesi düşük: ~' + Math.round(c.visibility) + ' m</div>' : '';
+    box.innerHTML =
+      '<div class="row" style="margin-top:14px;gap:14px"><div style="font-size:46px;line-height:1">' + ic + '</div>' +
+      '<div class="grow"><div class="big" style="font-size:36px">' + r(c.temperature_2m) + '°</div><div class="t">' + txt + '</div></div></div>' +
+      '<div class="muted" style="margin-top:8px;line-height:1.6">Hissedilen ' + r(c.apparent_temperature) + '° · Nem %' + r(c.relative_humidity_2m) + '<br>' +
+      '💨 Rüzgâr: ' + windFrom(c.wind_direction_10m) + ' ' + r(c.wind_speed_10m) + ' km/sa' + (c.wind_gusts_10m != null ? ' (hamle ' + r(c.wind_gusts_10m) + ')' : '') + '</div>' + vis +
+      '<div id="road-' + g.ppid + '"></div>' +
+      '<div class="t" style="margin-top:14px">Önümüzdeki 12 saat</div>' +
+      '<div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px">' + hours.map(x =>
+        '<div style="flex:none;width:54px;text-align:center;background:#f6f4ef;border-radius:12px;padding:8px 2px"><div class="muted" style="font-size:12px">' + x.t + '</div>' +
+        '<div style="font-size:20px;margin:2px 0">' + wmo(x.code, x.day)[0] + '</div><b>' + r(x.temp) + '°</b>' +
+        '<div style="font-size:11px;color:#2b6cb0;min-height:14px">' + (x.p ? '💧' + x.p + '%' : '') + '</div></div>').join('') + '</div>' +
+      '<div class="muted" style="margin-top:6px;font-size:11.5px">Hava verisi: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></div>';
+    // nakordoni yol tehlikesi varsa uyarı olarak göster
+    const rd = await roadP, slot = document.getElementById('road-' + g.ppid);
+    if (!slot || !rd) return;
+    const cond = rd.condition || {};
+    if (cond.hazard === true) {
+      const nm = cond.name || cond.condition_name || pick(cond, [/name/i]) || 'Yol tehlikesi';
+      const sev = cond.severity_name || '';
+      slot.innerHTML = '<div class="info" style="margin-top:10px">⚠️ Yol durumu: <b>' + esc(nm) + '</b>' + (sev ? ' · ' + esc(sev) : '') + '<br><span style="font-size:12px">Kaynak: nakordoni (sürücü bildirimi / model)</span></div>';
+    }
+  }
   async function gateExtra(g, a, box) {
     box.innerHTML = skel(1);
     try {
-      if (a === 'wx') {
-        const d = data(await api('v4/data/weather', 'ppid=' + g.ppid + '&lang=tr'));
-        const t = pick(d, [/^temp/i, /temperature/i]); const desc = pick(d, [/desc|condition|summary/i]); const wind = pick(d, [/wind/i]);
-        box.innerHTML = '<div class="row" style="margin-top:12px"><div class="big">' + (t != null ? Math.round(t) + '°' : '—') + '</div><div class="muted">' + esc(desc || '') + (wind != null ? '<br>Rüzgâr: ' + esc(wind) : '') + '</div></div>';
-        return;
-      }
+      if (a === 'wx') { await wxView(g, box); return; }
       if (a === 'best') { const bd = data(await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=tr')); if (bestView(bd, box)) return; }
       const d = data(a === 'fc' ? await api('v4/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=tr'));
       const s = numSeries(carPart(d).part) || numSeries(d);
