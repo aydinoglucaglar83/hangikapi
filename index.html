@@ -124,11 +124,12 @@
   };
   const GATES = [
     // nakordoni kapı kodları (17.11.2026'da doğrulandı, hepsi binek araç geçişi)
-    { key: 'kapikule', label: 'Kapıkule', ppid: 'id_384', other: 'Kapitan Andreevo 🇧🇬' },
-    { key: 'hamzabeyli', label: 'Hamzabeyli', ppid: 'id_386', other: 'Lesovo 🇧🇬' },
-    { key: 'derekoy', label: 'Dereköy', ppid: 'id_388', other: 'Malko Tarnovo 🇧🇬' },
-    { key: 'ipsala', label: 'İpsala', ppid: 'id_487', other: 'Kipi 🇬🇷' },
-    { key: 'pazarkule', label: 'Pazarkule', ppid: 'id_901', other: 'Kastanies 🇬🇷' }
+    // out = Türkiye'den çıkış (TR tarafı), in = Türkiye'ye giriş (komşu taraf)
+    { key: 'kapikule', label: 'Kapıkule', out: 'id_385', in: 'id_384', other: 'Kapitan Andreevo', flag: '🇧🇬' },
+    { key: 'hamzabeyli', label: 'Hamzabeyli', out: 'id_387', in: 'id_386', other: 'Lesovo', flag: '🇧🇬' },
+    { key: 'derekoy', label: 'Dereköy', out: 'id_389', in: 'id_388', other: 'Malko Tarnovo', flag: '🇧🇬' },
+    { key: 'ipsala', label: 'İpsala', out: 'id_486', in: 'id_487', other: 'Kipi', flag: '🇬🇷' },
+    { key: 'pazarkule', label: 'Pazarkule', out: 'id_900', in: 'id_901', other: 'Kastanies', flag: '🇬🇷' }
   ];
   const view = document.getElementById('view');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -243,7 +244,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 19 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 20 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -251,16 +252,26 @@
 
   // ============ KAPILARI BUL ============
   // Kapı kodları sabit: isim aramasına ve ekstra sorguya gerek yok
+  S.dir = store.get('hk_dir', 'out');
+  const dirLabel = (g, d) => d === 'out' ? '🇹🇷 → ' + g.flag + ' Türkiye\'den çıkış' : g.flag + ' → 🇹🇷 Türkiye\'ye giriş';
   async function findGates() {
-    if (!S.gates.length) S.gates = GATES.map(g => ({ ppid: g.ppid, label: g.label, key: g.key, other: g.other, car: true }));
+    S.gates = GATES.map(g => ({ ppid: S.dir === 'out' ? g.out : g.in, label: g.label, key: g.key, flag: g.flag,
+      other: S.dir === 'out' ? '→ ' + g.other + ' ' + g.flag : '← ' + g.other + ' ' + g.flag, car: true }));
     return S.gates;
+  }
+  // Yön seçici (çıkış / giriş)
+  const dirChips = (dark) => '<div class="chips dirchips" style="margin:' + (dark ? '10px 0 2px' : '4px 0 6px') + '">' +
+    [['out', '🇹🇷 → Çıkış'], ['in', '→ 🇹🇷 Giriş']].map(([k, l]) =>
+      '<button class="chip' + (S.dir === k ? ' on' : '') + '" data-dir="' + k + '"' + (dark && S.dir !== k ? ' style="background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.2)"' : (dark ? ' style="background:#fff;color:var(--ink);border-color:#fff"' : '')) + '>' + l + '</button>').join('') + '</div>';
+  function bindDir(cb) {
+    document.querySelectorAll('.dirchips .chip').forEach(b => b.onclick = ev => { ev.stopPropagation(); if (S.dir === b.dataset.dir) return; S.dir = b.dataset.dir; store.set('hk_dir', S.dir); cb(); });
   }
 
   // ============ ANA EKRAN ============
   PAGES.home = {
     render() {
       view.innerHTML =
-        '<div class="hero" id="hero"><div class="lbl">🚗 Binek araç · Trakya sınır kapıları · şu an</div><div id="heroBody">' + '<div class="gates">' +
+        '<div class="hero" id="hero"><div class="lbl">🚗 Binek araç · Trakya sınır kapıları · şu an</div>' + dirChips(true) + '<div id="heroBody">' + '<div class="gates">' +
         GATES.slice(0, 3).map(g => '<div class="g"><b>' + g.label + '</b><div class="m">…</div><div class="s">yükleniyor</div></div>').join('') + '</div></div>' +
         '<button id="heroBtn">Detaylar →</button></div>' +
         '<div class="tiles">' +
@@ -277,6 +288,7 @@
       view.querySelectorAll('.tile').forEach(t => t.onclick = () => go(t.dataset.p));
       document.getElementById('heroBtn').onclick = () => go('gates');
       bindFooter();
+      bindDir(() => PAGES.home.render());
       heroLoad();
     }
   };
@@ -309,7 +321,9 @@
       let gates;
       try { gates = await findGates(); }
       catch (e) { view.innerHTML = '<div class="card">' + errBox(e) + '</div>' + footer; bindFooter(); return; }
-      view.innerHTML = gates.map(g => '<div class="card" id="g-' + g.ppid + '">' + skel(1) + '</div>').join('') + footer; bindFooter();
+      view.innerHTML = dirChips(false) + '<div class="muted" style="margin:0 2px 8px">' + (S.dir === 'out' ? 'Türkiye\'den yurt dışına çıkarken bekleme' : 'Yurt dışından Türkiye\'ye dönerken bekleme') + '</div>' +
+        gates.map(g => '<div class="card" id="g-' + g.ppid + '">' + skel(1) + '</div>').join('') + footer; bindFooter();
+      bindDir(() => PAGES.gates.render());
       for (const g of gates) gateCard(g);
     }
   };
@@ -326,7 +340,7 @@
     } catch (e) { el.innerHTML = '<div class="t">' + esc(g.label) + '</div>' + errBox(e); return; }
     const [cls, word] = level(m);
     el.innerHTML =
-      '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + (g.other ? ' <span class="muted" style="font-size:13px;font-weight:500">↔ ' + esc(g.other) + '</span>' : '') + '</div>' +
+      '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + (g.other ? ' <span class="muted" style="font-size:13px;font-weight:500">' + esc(g.other) + '</span>' : '') + '</div>' +
       '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + (g.carOnly ? ' otomobil' : ' araç') : '') + (upd ? ' · ' + esc(upd) : '') + '</div></div>' +
       '<span class="pill ' + cls + '">' + word + '</span></div>' +
       '<div class="big" style="margin:8px 0 4px">' + fmtMin(m) + '</div><div class="muted">tahmini bekleme · ' + (g.carOnly ? '🚗 binek araç' : 'tüm araçlar') + '</div>' +
