@@ -240,10 +240,10 @@
       if (id) take(o, String(id));
       for (const [k, v] of Object.entries(o)) if (/^id_\d+$/.test(k) && v && typeof v === 'object') take(v, k);
     });
-    const s = await api('v1/data/search', 'name=' + encodeURIComponent(terms.slice(0, 20).join(',')) + '&lang=en');
+    const s = await api('v4/data/search', 'name=' + encodeURIComponent(terms.slice(0, 20).join(',')) + '&lang=en');
     scan(s);
     if (!out.length) {
-      const all = await api('v1/data/checkpoints');
+      const all = await api('v4/data/checkpoints');
       scan(all);
       if (!out.length && /outside your approved countries/i.test(JSON.stringify(all))) throw friendly('country');
     }
@@ -284,7 +284,7 @@
       if (!gates.length) { box.innerHTML = '<div class="note">Bu kapılar nakordoni\'de bulunamadı.</div>'; return; }
       const cells = [];
       for (const g of gates.slice(0, 3)) {
-        try { const q = carPart(data(await api('v1/data/queue', 'ppid=' + g.ppid))).part; const m = waitOf(q); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
+        try { const q = carPart(data(await api('v4/data/queue', 'ppid=' + g.ppid))).part; const m = waitOf(q); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
         catch (e) { cells.push([g.label, '—', 'veri yok']); }
       }
       if (document.getElementById('heroBody') !== box) return;
@@ -313,7 +313,7 @@
     const el = document.getElementById('g-' + g.ppid); if (!el) return;
     let m = g.wait, len, upd;
     try {
-      const cp = carPart(data(await api('v1/data/queue', 'ppid=' + g.ppid)));
+      const cp = carPart(data(await api('v4/data/queue', 'ppid=' + g.ppid)));
       const q = cp.part; g.carOnly = cp.car;
       m = waitOf(q); len = pick(q, [/queue_?len/i, /^queue$/i, /cars|vehicles|count/i]); upd = pick(q, [/updated|last_?update|timestamp/i]);
     } catch (e) { el.innerHTML = '<div class="t">' + esc(g.label) + '</div>' + errBox(e); return; }
@@ -341,12 +341,12 @@
     box.innerHTML = skel(1);
     try {
       if (a === 'wx') {
-        const d = data(await api('v1/data/weather', 'ppid=' + g.ppid + '&lang=en'));
+        const d = data(await api('v4/data/weather', 'ppid=' + g.ppid + '&lang=en'));
         const t = pick(d, [/^temp/i, /temperature/i]); const desc = pick(d, [/desc|condition|summary/i]); const wind = pick(d, [/wind/i]);
         box.innerHTML = '<div class="row" style="margin-top:12px"><div class="big">' + (t != null ? Math.round(t) + '°' : '—') + '</div><div class="muted">' + esc(desc || '') + (wind != null ? '<br>Rüzgâr: ' + esc(wind) : '') + '</div></div>';
         return;
       }
-      const d = data(a === 'fc' ? await api('v1/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v1/data/day-stats', 'ppid=' + g.ppid + '&lang=en'));
+      const d = data(a === 'fc' ? await api('v4/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=en'));
       const s = numSeries(carPart(d).part) || numSeries(d);
       if (!s) { box.innerHTML = '<div class="muted" style="margin-top:12px">Grafik için yeterli veri yok.</div>'; return; }
       const max = Math.max(...s.filter(Number.isFinite), 1), min = Math.min(...s.filter(Number.isFinite));
@@ -363,7 +363,7 @@
     async render() {
       view.innerHTML = '<div class="card">' + skel(4) + '</div>';
       try {
-        const d = data(await api('v1/data/currency'));
+        const d = data(await api('v4/data/currency'));
         const rates = d.rates || {};
         const NAMES = { USD: 'ABD Doları', GBP: 'İngiliz Sterlini', CHF: 'İsviçre Frangı', PLN: 'Polonya Zlotisi', CZK: 'Çek Korunası', HUF: 'Macar Forinti', RON: 'Rumen Leyi', NOK: 'Norveç Kronu', UAH: 'Ukrayna Grivnası', BGN: 'Bulgar Levası', TRY: 'Türk Lirası', RSD: 'Sırp Dinarı' };
         const codes = Object.keys(rates).filter(c => c !== 'EUR');
@@ -392,7 +392,7 @@
   }
   PAGES.holidays = countryPage('Resmi tatiller', async c => {
     const y = new Date().getFullYear();
-    let list = mainArray(data(await api('v2/data/holiday-calendar/holidays', 'country=' + c + '&year=' + y + '&lang=tr')));
+    let list = mainArray(data(await api('v4/data/holiday-calendar/holidays', 'country=' + c + '&year=' + y + '&lang=tr')));
     if (!list.length) return '<div class="card muted">Bu yıl için tatil bulunamadı.</div>';
     const today = new Date(); today.setHours(0, 0, 0, 0);
     list = list.map(h => ({ h, iso: isoIn(h) })).filter(x => x.iso).sort((a, b) => a.iso.localeCompare(b.iso));
@@ -407,7 +407,7 @@
 
   // ============ AKARYAKIT ============
   PAGES.fuel = countryPage('Akaryakıt', async c => {
-    const d = data(await api('v1/data/fuel', 'country=' + c));
+    const d = data(await api('v4/data/fuel', 'country=' + c));
     const arr = mainArray(d);
     if (arr.length) return '<div class="card list">' + arr.slice(0, 40).map(r => {
       const p = pick(r, [/^price/i, /eur|value|avg/i]); const cur = pick(r, [/currency/i]) || '';
@@ -422,7 +422,7 @@
 
   // ============ VİNYET VE OTOYOL ============
   PAGES.tolls = countryPage('Vinyet ve otoyol', async c => {
-    const d = data(await api('v2/data/vignettes', 'country=' + c));
+    const d = data(await api('v4/data/vignettes', 'country=' + c));
     let arr = mainArray(d);
     const isCar = r => { const t = JSON.stringify(r); return /car|passenger|m1|kategori b|legkov|легков/i.test(t) || !NONCAR_RE.test(t); };
     const cars = arr.filter(isCar); if (cars.length) arr = cars;
@@ -455,7 +455,7 @@
         chat.insertAdjacentHTML('beforeend', '<div class="bubble me">' + esc(q) + '</div><div class="bubble" id="pending">…</div>');
         const p = document.getElementById('pending'); p.removeAttribute('id');
         try {
-          const d = data(await api('v1/data/assistant', 'q=' + encodeURIComponent(q + ' (binek araçla seyahat ediyorum)') + '&lang=tr' + (S.gates[0] ? '&ppid=' + S.gates[0].ppid : '')));
+          const d = data(await api('v4/data/assistant', 'q=' + encodeURIComponent(q + ' (binek araçla seyahat ediyorum)') + '&lang=tr' + (S.gates[0] ? '&ppid=' + S.gates[0].ppid : '')));
           p.textContent = typeof d === 'string' ? d : (pick(d, [/^answer$/i, /^reply$/i, /^text$/i, /^message$/i, /response|content/i]) || 'Cevap alınamadı.');
         } catch (e) { p.innerHTML = esc(e.message); }
         p.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -699,7 +699,7 @@
       document.getElementById('save').onclick = () => { S.url = document.getElementById('url').value.trim() || S.url; store.set('hk_url', S.url); S.gates = []; go('home'); };
       document.getElementById('test').onclick = async () => {
         const o = document.getElementById('tout'); o.textContent = 'deneniyor…';
-        try { const s = data(await api('v1/data/status')).summary; o.textContent = '✅ Bağlı' + (s ? ' · ' + s.online + '/' + s.total + ' servis çalışıyor' : ''); } catch (e) { o.textContent = '❌ ' + e.message; }
+        try { const s = data(await api('v4/data/status')).summary; o.textContent = '✅ Bağlı' + (s ? ' · ' + s.online + '/' + s.total + ' servis çalışıyor' : ''); } catch (e) { o.textContent = '❌ ' + e.message; }
       };
       api('v2/account/usage').then(b => {
         const u = b.usage || data(b); const used = pick(u, [/^used$/i]), lim = pick(u, [/^limit$/i]);
