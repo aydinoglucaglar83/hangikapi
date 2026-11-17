@@ -71,6 +71,7 @@
   .bars{display:flex;align-items:flex-end;gap:3px;height:110px;margin-top:12px}
   .bars div{flex:1;border-radius:4px 4px 0 0;background:var(--acc);opacity:.85;min-height:3px}
   .bars div.low{background:var(--ok)}
+  .bars div.na{background:#d9dce1}
   .axis{display:flex;justify-content:space-between;color:var(--mut);font-size:11px;margin-top:4px}
   .bubble{background:#fff;border:1px solid var(--line);border-radius:18px 18px 18px 6px;padding:12px 14px;margin:10px 0;line-height:1.5;white-space:pre-wrap}
   .bubble.me{background:var(--ink);color:#fff;border-radius:18px 18px 6px 18px;margin-left:40px}
@@ -244,7 +245,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 21 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 22 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -358,6 +359,53 @@
       if (n.filter(Number.isFinite).length >= v.length * .8) { s = n; return; } } });
     return s;
   }
+  // ============ EN İYİ SAAT (nakordoni day-stats: matrix[gün][saat], gün 0 = Pazartesi) ============
+  const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+  const DSHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  const hh = h => String(h).padStart(2, '0') + ':00';
+  function findKey(o, key, ok) { let f = null; walk(o, x => { if (f == null && key in x && ok(x[key])) f = x[key]; }); return f; }
+  function bestView(d, box) {
+    const isM = v => Array.isArray(v) && v.length === 7 && v.every(r => Array.isArray(r) && r.length >= 24);
+    const src = carPart(d).part;
+    const M = findKey(src, 'matrix', isM) || findKey(d, 'matrix', isM);
+    const W = findKey(src, 'weekday_avg', v => Array.isArray(v) && v.length === 7) || findKey(d, 'weekday_avg', v => Array.isArray(v) && v.length === 7);
+    if (!M && !W) return false;
+    const unit = String(pick(d, [/^unit$/i]) || '');
+    const isMin = /min|dk|wait/i.test(unit);
+    const val = n => n == null || !isFinite(n) ? '—' : isMin ? fmtMin(n) : '~' + Math.round(n) + ' araç';
+    const num = v => v == null || v === '' || !isFinite(+v) ? null : +v;
+    const wk = W ? W.map(num) : M.map(r => { const v = r.map(num).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
+    const okW = wk.filter(x => x != null);
+    const bestDay = okW.length ? wk.indexOf(Math.min(...okW)) : -1;
+    const today = (new Date().getDay() + 6) % 7;
+    let sel = today;
+    const draw = () => {
+      let html = '';
+      if (M) {
+        const row = M[sel].slice(0, 24).map(num), ok = row.filter(x => x != null);
+        const max = Math.max(...ok, 1);
+        // en sakin / en yoğun 2 saatlik pencere (gece yarısını aşabilir)
+        let lo = -1, loV = Infinity, hi = -1, hiV = -Infinity;
+        for (let i = 0; i < 24; i++) { const a = row[i], b = row[(i + 1) % 24]; if (a == null || b == null) continue; const v = a + b; if (v < loV) { loV = v; lo = i; } if (v > hiV) { hiV = v; hi = i; } }
+        const inLo = i => lo >= 0 && (i === lo || i === (lo + 1) % 24);
+        html += '<div class="t" style="margin-top:14px">' + (sel === today ? 'Bugün' : DAYS[sel]) + ' saat saat tipik yoğunluk</div>' +
+          '<div class="bars">' + row.map((n, i) => '<div class="' + (n == null ? 'na' : inLo(i) ? 'low' : '') + '" style="height:' + (n == null ? 3 : Math.max(3, n / max * 100)) + '%"></div>').join('') + '</div>' +
+          '<div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>' +
+          (lo >= 0 ? '<div style="margin-top:10px">🟢 <b>En sakin:</b> ' + hh(lo) + '–' + hh((lo + 2) % 24) + ' <span class="muted">(' + val(loV / 2) + ')</span></div>' +
+            '<div style="margin-top:4px">🔴 <b>En yoğun:</b> ' + hh(hi) + '–' + hh((hi + 2) % 24) + ' <span class="muted">(' + val(hiV / 2) + ')</span></div>'
+            : '<div class="muted" style="margin-top:8px">Bu gün için yeterli veri yok.</div>');
+      }
+      html += '<div class="t" style="margin-top:16px">Gün seç</div><div class="chips daychips">' +
+        DAYS.map((n, i) => '<button class="chip' + (i === sel ? ' on' : '') + '" data-d="' + i + '">' + (i === bestDay ? '🟢 ' : '') + DSHORT[i] + (i === today ? ' · bugün' : '') + '</button>').join('') + '</div>' +
+        (bestDay >= 0 ? '<div class="muted" style="margin-top:8px">Haftanın en sakin günü genelde <b>' + DAYS[bestDay] + '</b> (ortalama ' + val(wk[bestDay]) + ').</div>' : '') +
+        '<div class="muted" style="margin-top:6px;font-size:12px">Geçmiş haftaların ortalamasıdır, anlık durum değil. Saatler kapının yerel saatidir.</div>';
+      box.innerHTML = html;
+      box.querySelectorAll('.daychips .chip').forEach(c => c.onclick = () => { sel = +c.dataset.d; draw(); });
+      if (!M) return;
+    };
+    draw();
+    return true;
+  }
   async function gateExtra(g, a, box) {
     box.innerHTML = skel(1);
     try {
@@ -367,14 +415,15 @@
         box.innerHTML = '<div class="row" style="margin-top:12px"><div class="big">' + (t != null ? Math.round(t) + '°' : '—') + '</div><div class="muted">' + esc(desc || '') + (wind != null ? '<br>Rüzgâr: ' + esc(wind) : '') + '</div></div>';
         return;
       }
+      if (a === 'best') { const bd = data(await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=tr')); if (bestView(bd, box)) return; }
       const d = data(a === 'fc' ? await api('v4/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=tr'));
       const s = numSeries(carPart(d).part) || numSeries(d);
       if (!s) { box.innerHTML = '<div class="muted" style="margin-top:12px">Grafik için yeterli veri yok.</div>'; return; }
       const max = Math.max(...s.filter(Number.isFinite), 1), min = Math.min(...s.filter(Number.isFinite));
       const lowIdx = s.indexOf(min);
       box.innerHTML = '<div class="bars">' + s.map((n, i) => '<div class="' + (i === lowIdx ? 'low' : '') + '" style="height:' + Math.max(3, n / max * 100) + '%"></div>').join('') + '</div>' +
-        '<div class="axis"><span>' + (a === 'fc' ? 'şimdi' : 'başlangıç') + '</span><span>' + (a === 'fc' ? '+24 sa' : 'son') + '</span></div>' +
-        '<div class="muted" style="margin-top:8px">🟢 En sakin an: ' + (a === 'fc' ? (lowIdx === 0 ? 'şimdi' : lowIdx + ' saat sonra') : (lowIdx + 1) + '. dilim') + ' (~' + fmtMin(min) + ')</div>';
+        '<div class="axis"><span>' + (a === 'fc' ? 'şimdi' : (s.length === 7 ? 'Pzt' : 'ilk')) + '</span><span>' + (a === 'fc' ? '+24 sa' : (s.length === 7 ? 'Paz' : 'son')) + '</span></div>' +
+        '<div class="muted" style="margin-top:8px">🟢 En sakin an: ' + (a === 'fc' ? (lowIdx === 0 ? 'şimdi' : lowIdx + ' saat sonra (saat ' + hh((new Date().getHours() + lowIdx) % 24) + ' civarı)') : (s.length === 7 ? DAYS[lowIdx] : (lowIdx + 1) + '. sıra')) + ' (~' + fmtMin(min) + ')</div>';
     } catch (e) { box.innerHTML = '<div style="margin-top:12px">' + errBox(e) + '</div>'; }
   }
 
