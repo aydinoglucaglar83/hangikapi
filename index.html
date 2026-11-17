@@ -246,7 +246,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 27 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 28 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -553,13 +553,27 @@
     walk(d, o => { if (!f && String(o.country_code || o.code || '').toUpperCase() === cc && (o.prices || o.gasoline || o.diesel)) f = o; });
     return f;
   }
+  // Euro kurları (nakordoni, 1 EUR = x birim); sayfa açık kaldıkça 1 saat saklanır
+  let eurRates = null, eurRatesT = 0;
+  // Kaynaklar: nakordoni (RSD, BGN…), ECB/Frankfurter (TRY dahil), yedek: open.er-api.com
+  async function getEurRates() {
+    if (eurRates && Date.now() - eurRatesT < 3600000) return eurRates;
+    const j = async u => { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch (e) { return null; } };
+    const [nk, ecb] = await Promise.all([api('v4/data/currency').then(data).catch(() => null), j('https://api.frankfurter.app/latest?from=EUR')]);
+    const r = Object.assign({}, (nk && nk.rates) || {}, (ecb && ecb.rates) || {});
+    if (!r.RSD || !r.TRY || !r.BGN) { const er = await j('https://open.er-api.com/v6/latest/EUR'); if (er && er.rates) for (const k of ['RSD', 'TRY', 'BGN']) if (!r[k] && er.rates[k]) r[k] = er.rates[k]; }
+    if (Object.keys(r).length) { eurRates = r; eurRatesT = Date.now(); }
+    return eurRates;
+  }
   PAGES.fuel = countryPage('Akaryakıt', async c => {
-    const d = await fuelData();
+    const [d, rates] = await Promise.all([fuelData(), getEurRates()]);
     const e = fuelEntry(d, c);
     if (!e) return '<div class="card muted">Bu ülke için fiyat bulunamadı.</div>';
     const p = e.prices || e;
     const cur = e.local_currency || e.currency || '';
     const unit = e.unit || 'litre';
+    const rate = cur && cur.toUpperCase() !== 'EUR' && rates ? +rates[cur.toUpperCase()] : NaN;
+    const eur = v => rate > 0 ? '<div class="muted" style="font-size:13px;font-weight:600;text-align:right">≈ ' + (v / rate).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €</div>' : '';
     const ch = e.price_changes || {};
     const rows = [['gasoline', '⛽ Benzin (95)'], ['gasoline_super', '⛽ Benzin (98/super)'], ['diesel', '🛢 Motorin'], ['lpg', '🔥 LPG']]
       .filter(([k]) => p[k] != null && !isNaN(+p[k]));
@@ -567,9 +581,9 @@
     const chg = k => { const v = ch[k] ?? (ch[k + '_pct']); if (v == null || isNaN(+v) || +v === 0) return ''; const up = +v > 0; return ' <span class="pill ' + (up ? 'p-bad' : 'p-ok') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(+v).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + '</span>'; };
     const when = e.fetched_at ? new Date(e.fetched_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }) : '';
     return '<div class="card"><div class="muted">' + esc(((COUNTRIES.find(x => x[0] === c) || [])[1]) || e.country_name || c) + ' · ülke ortalaması · ' + esc(cur) + '/' + esc(unit === 'liter' ? 'litre' : unit) + '</div><div class="list" style="margin-top:6px">' +
-      rows.map(([k, l]) => '<div class="it"><div class="grow"><div class="t">' + l + chg(k) + '</div></div><b style="font-size:20px">' + (+p[k]).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <span class="muted" style="font-size:13px">' + esc(cur) + '</span></b></div>').join('') +
+      rows.map(([k, l]) => '<div class="it"><div class="grow"><div class="t">' + l + chg(k) + '</div></div><div><b style="font-size:20px">' + (+p[k]).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <span class="muted" style="font-size:13px">' + esc(cur) + '</span></b>' + eur(+p[k]) + '</div></div>').join('') +
       '</div></div>' +
-      '<div class="muted" style="font-size:12px;text-align:center">' + (when ? 'Güncelleme: ' + esc(when) + ' · ' : '') + 'Pompadaki fiyat istasyona göre biraz farklı olabilir.<br>Veri: <a href="https://openvan.camp" target="_blank" rel="noopener">OpenVan.camp</a> (CC BY 4.0)</div>';
+      '<div class="muted" style="font-size:12px;text-align:center">' + (when ? 'Güncelleme: ' + esc(when) + ' · ' : '') + 'Pompadaki fiyat istasyona göre biraz farklı olabilir.' + (rate > 0 ? '<br>€ karşılığı: 1 € = ' + rate.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ' + esc(cur) + ' kuruyla' : '') + '<br>Veri: <a href="https://openvan.camp" target="_blank" rel="noopener">OpenVan.camp</a> (CC BY 4.0)</div>';
   });
 
   // ============ VİNYET VE OTOYOL ============
