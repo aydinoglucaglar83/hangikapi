@@ -243,7 +243,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 18 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 19 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -288,7 +288,7 @@
       if (!gates.length) { box.innerHTML = '<div class="note">Bu kapılar nakordoni\'de bulunamadı.</div>'; return; }
       const cells = [];
       for (const g of gates.slice(0, 3)) {
-        try { const d = data(await api('v4/data/queue', 'ppid=' + g.ppid)); const sn = snapOf(d); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(d).part); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
+        try { const b = await api('v4/data/queue', 'ppid=' + g.ppid); const d = data(b); const sn = snapOf(b); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(d).part); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
         catch (e) { cells.push([g.label, '—', 'veri yok']); }
       }
       if (document.getElementById('heroBody') !== box) return;
@@ -317,8 +317,9 @@
     const el = document.getElementById('g-' + g.ppid); if (!el) return;
     let m = g.wait, len, upd;
     try {
-      const d = data(await api('v4/data/queue', 'ppid=' + g.ppid));
-      const sn = snapOf(d), cp = carPart(d), q = cp.part;
+      const b = await api('v4/data/queue', 'ppid=' + g.ppid);
+      const d = data(b);
+      const sn = snapOf(b), cp = carPart(d), q = cp.part;
       g.carOnly = g.car || cp.car;
       if (sn) { m = sn.wait_min != null ? +sn.wait_min : waitOf(q); len = sn.queue_now; upd = ageText(sn); }
       else { m = waitOf(q); len = pick(q, [/queue_?len/i, /^queue$/i, /queue_now/i]); upd = ''; }
