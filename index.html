@@ -176,7 +176,22 @@
     if (!best && Array.isArray(o) && o.length && typeof o[0] === 'object') best = o;
     return best || [];
   }
-  const nameOf = o => { const n = o.name_tr ?? o.name ?? o.name_en ?? o.title ?? o.city ?? o.label; return typeof n === 'object' && n ? (n.tr || n.local || n.en || Object.values(n).find(v => typeof v === 'string')) : n; };
+  // İsim seçimi: önce Türkçe, sonra İngilizce; Bulgarca/Yunanca (yerel dil) en son
+  const NONLATIN = /[\u0370-\u03FF\u0400-\u04FF]/;
+  function pickLang(n) {
+    if (!n || typeof n !== 'object') return n;
+    const tr = n.tr || n.TR || n.turkish;
+    if (tr) return tr;
+    const t = n.translations;
+    if (t) {
+      if (Array.isArray(t)) { const x = t.find(e => /^tr/i.test(e.lang || e.language || e.code || '')); if (x) return x.text || x.name || x.value; }
+      else if (typeof t === 'object') { const x = t.tr || t.TR; if (x) return typeof x === 'object' ? (x.name || x.text) : x; }
+    }
+    if (Array.isArray(n)) { const x = n.find(e => /^tr/i.test(e.language || e.lang || '')) || n.find(e => /^en/i.test(e.language || e.lang || '')); if (x) return x.text || x.name; }
+    const vals = Object.values(n).filter(v => typeof v === 'string');
+    return n.en || n.english || vals.find(v => !NONLATIN.test(v)) || n.local || vals[0];
+  }
+  const nameOf = o => { const n = o.name_tr ?? o.name ?? o.name_en ?? o.title ?? o.city ?? o.label; const r = typeof n === 'object' && n ? pickLang(n) : n; return (typeof r === 'string' && NONLATIN.test(r) && o.name_en) ? o.name_en : r; };
   const isoIn = o => { let f; walk(o, x => { if (f) return; for (const v of Object.values(x)) if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) { f = v; return; } }); if (!f && typeof o.date === 'string') f = o.date; return f; };
   const trDate = (iso, opt) => { const d = new Date(iso.slice(0, 10) + 'T12:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('tr-TR', opt || { day: 'numeric', month: 'long', weekday: 'long' }); };
   const fmtMin = m => m == null ? '—' : (m = Math.round(m)) < 60 ? m + ' dk' : Math.floor(m / 60) + ' sa' + (m % 60 ? ' ' + (m % 60) + ' dk' : '');
@@ -332,12 +347,12 @@
     box.innerHTML = skel(1);
     try {
       if (a === 'wx') {
-        const d = data(await api('v4/data/weather', 'ppid=' + g.ppid + '&lang=en'));
+        const d = data(await api('v4/data/weather', 'ppid=' + g.ppid + '&lang=tr'));
         const t = pick(d, [/^temp/i, /temperature/i]); const desc = pick(d, [/desc|condition|summary/i]); const wind = pick(d, [/wind/i]);
         box.innerHTML = '<div class="row" style="margin-top:12px"><div class="big">' + (t != null ? Math.round(t) + '°' : '—') + '</div><div class="muted">' + esc(desc || '') + (wind != null ? '<br>Rüzgâr: ' + esc(wind) : '') + '</div></div>';
         return;
       }
-      const d = data(a === 'fc' ? await api('v4/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=en'));
+      const d = data(a === 'fc' ? await api('v4/data/forecast', 'ppid=' + g.ppid + '&prediction_steps=24') : await api('v4/data/day-stats', 'ppid=' + g.ppid + '&lang=tr'));
       const s = numSeries(carPart(d).part) || numSeries(d);
       if (!s) { box.innerHTML = '<div class="muted" style="margin-top:12px">Grafik için yeterli veri yok.</div>'; return; }
       const max = Math.max(...s.filter(Number.isFinite), 1), min = Math.min(...s.filter(Number.isFinite));
