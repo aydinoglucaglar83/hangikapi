@@ -130,7 +130,8 @@
     { key: 'hamzabeyli', lat: 41.97, lon: 26.54, label: 'Hamzabeyli', out: 'id_387', in: 'id_386', other: 'Lesovo', flag: '🇧🇬' },
     { key: 'derekoy', lat: 41.968, lon: 27.355, label: 'Dereköy', out: 'id_389', in: 'id_388', other: 'Malko Tarnovo', flag: '🇧🇬' },
     { key: 'ipsala', lat: 40.937, lon: 26.325, label: 'İpsala', out: 'id_486', in: 'id_487', other: 'Kipi', flag: '🇬🇷' },
-    { key: 'pazarkule', lat: 41.656, lon: 26.525, label: 'Pazarkule', out: 'id_900', in: 'id_901', other: 'Kastanies', flag: '🇬🇷' }
+    { key: 'pazarkule', lat: 41.656, lon: 26.525, label: 'Pazarkule', out: 'id_900', in: 'id_901', other: 'Kastanies', flag: '🇬🇷' },
+    { key: 'kalotina', lat: 42.991, lon: 22.869, label: 'Kalotina', other: 'Gradina', flag: '🇷🇸', fromFlag: '🇧🇬', q: { out: 'Kalotina', in: 'Gradina' }, group: 'Bulgaristan – Sırbistan' },
   ];
   const view = document.getElementById('view');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -245,7 +246,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 24 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 25 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -255,9 +256,27 @@
   // Kapı kodları sabit: isim aramasına ve ekstra sorguya gerek yok
   S.dir = store.get('hk_dir', 'out');
   const dirLabel = (g, d) => d === 'out' ? '🇹🇷 → ' + g.flag + ' Türkiye\'den çıkış' : g.flag + ' → 🇹🇷 Türkiye\'ye giriş';
+  // Kodu sabit olmayan kapılar (ör. Kalotina–Gradina) nakordoni isim aramasıyla bulunur ve telefonda saklanır
+  async function ppidByName(name) {
+    const ck = 'hk_ppid_' + name.toLowerCase(), c = store.get(ck, '');
+    if (c) return c;
+    const d = data(await api('v4/data/search', 'name=' + encodeURIComponent(name) + '&lang=en'));
+    const ms = []; walk(d, o => { if (o.ppid && typeof o.ppid !== 'object') ms.push(o); });
+    if (!ms.length) return null;
+    const txt = o => Object.values(o).filter(v => typeof v !== 'object').join(' ');
+    const best = ms.find(o => /car|passenger|легков|automobil/i.test(txt(o))) || ms.find(o => !NONCAR_RE.test(txt(o))) || ms[0];
+    store.set(ck, String(best.ppid)); return String(best.ppid);
+  }
   async function findGates() {
-    S.gates = GATES.map(g => ({ ppid: S.dir === 'out' ? g.out : g.in, label: g.label, key: g.key, flag: g.flag,
-      other: S.dir === 'out' ? '→ ' + g.other + ' ' + g.flag : '← ' + g.other + ' ' + g.flag, car: true }));
+    S.gates = await Promise.all(GATES.map(async g => {
+      let ppid = S.dir === 'out' ? g.out : g.in;
+      if (!ppid && g.q) { try { ppid = await ppidByName(g.q[S.dir]); } catch (e) { ppid = null; } }
+      const base = { ppid, label: g.label, key: g.key, flag: g.flag, group: g.group, car: true };
+      if (g.q) return Object.assign(base, S.dir === 'out'
+        ? { label: g.label, other: '→ ' + g.other + ' ' + g.flag }
+        : { label: g.other, other: '→ ' + g.label + ' ' + g.fromFlag });
+      return Object.assign(base, { other: S.dir === 'out' ? '→ ' + g.other + ' ' + g.flag : '← ' + g.other + ' ' + g.flag });
+    }));
     return S.gates;
   }
   // Yön seçici (çıkış / giriş)
@@ -324,13 +343,14 @@
       try { gates = await findGates(); }
       catch (e) { view.innerHTML = '<div class="card">' + errBox(e) + '</div>' + footer; bindFooter(); return; }
       view.innerHTML = dirChips(false) + '<div class="muted" style="margin:0 2px 8px">' + (S.dir === 'out' ? 'Türkiye\'den yurt dışına çıkarken bekleme' : 'Yurt dışından Türkiye\'ye dönerken bekleme') + '</div>' +
-        gates.map(g => '<div class="card" id="g-' + g.ppid + '">' + skel(1) + '</div>').join('') + footer; bindFooter();
+        gates.map((g, i) => (g.group && (i === 0 || gates[i - 1].group !== g.group) ? '<div class="t" style="margin:18px 2px 0">' + esc(g.group) + (S.dir === 'out' ? ' · 🇧🇬 → 🇷🇸' : ' · 🇷🇸 → 🇧🇬') + '</div>' : '') + '<div class="card" id="g-' + (g.ppid || g.key) + '">' + skel(1) + '</div>').join('') + footer; bindFooter();
       bindDir(() => PAGES.gates.render());
       for (const g of gates) gateCard(g);
     }
   };
   async function gateCard(g) {
-    const el = document.getElementById('g-' + g.ppid); if (!el) return;
+    const el = document.getElementById('g-' + (g.ppid || g.key)); if (!el) return;
+    if (!g.ppid) { el.innerHTML = '<div class="h2">' + esc(g.label) + ' <span class="muted" style="font-size:13px;font-weight:500">' + esc(g.other || '') + '</span></div><div class="info" style="margin-top:8px">Bu kapı nakordoni\'de bulunamadı ya da hesabında bu ülke için izin yok.</div>'; return; }
     let m = g.wait, len, upd;
     try {
       const b = await api('v4/data/queue', 'ppid=' + g.ppid);
@@ -778,7 +798,7 @@
         const gg = gatesOn[0]; gateInfo = { label: gg.G.label, km: gg.km, wait: null };
         // Başlangıç İstanbul'a varıştan daha yakınsa Türkiye'den çıkış sayılır
         const IST = [28.97, 41.01], fromTR = hav([A.lon, A.lat], IST) < hav([B.lon, B.lat], IST);
-        try { const b = await api('v4/data/queue', 'ppid=' + (fromTR ? gg.G.out : gg.G.in)); const sn = snapOf(b); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(data(b)).part); if (m != null && isFinite(m)) { gateInfo.wait = m; waitMin = m; } } catch (e) {}
+        try { const pp = gg.G.q ? await ppidByName(gg.G.q[fromTR ? 'out' : 'in']) : (fromTR ? gg.G.out : gg.G.in); if (!pp) throw 0; const b = await api('v4/data/queue', 'ppid=' + pp); const sn = snapOf(b); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(data(b)).part); if (m != null && isFinite(m)) { gateInfo.wait = m; waitMin = m; } } catch (e) {}
       }
       const etaAt = kmv => dep + (kmv / total) * durS * 1000 + (gateInfo && kmv > gateInfo.km ? waitMin * 60000 : 0);
       pts.forEach(p => { p.eta = etaAt(p.km); });
