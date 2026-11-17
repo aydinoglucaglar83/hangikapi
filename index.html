@@ -245,7 +245,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 23 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 24 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -282,6 +282,7 @@
         tile('tolls', '🛣', 'Vinyet ve otoyol', 'Ülkelere göre ücretler') +
         tile('ask', '🤖', 'Asistana sor', 'Sınırla ilgili her şey') +
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
+        '<button class="tile" data-p="route" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🗺</span><span><b>Rota havası</b><small>Gideceğin yeri yaz, yol boyunca hava olayları</small></span></button>' +
         '<button class="tile" data-p="aanews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">📰</span><span><b>Son dakika</b><small>Anadolu Ajansı · güncel, ekonomi, dünya, spor…</small></span></button>' +
         '<button class="tile" data-p="avnews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">✈️</span><span><b>Havacılık haberleri</b><small>AirportHaber, Havayolu101, Simple Flying, AeroTime</small></span></button>' +
         '<button class="tile" data-p="radar" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></button>' +
@@ -412,7 +413,7 @@
     61: ['🌦', 'Hafif yağmur'], 63: ['🌧', 'Yağmur'], 65: ['🌧', 'Kuvvetli yağmur'], 66: ['🌧', 'Donan yağmur'], 67: ['🌧', 'Donan yağmur'],
     71: ['🌨', 'Hafif kar'], 73: ['🌨', 'Kar'], 75: ['❄️', 'Yoğun kar'], 77: ['🌨', 'Kar taneleri'], 80: ['🌦', 'Sağanak'], 81: ['🌧', 'Sağanak'], 82: ['⛈', 'Şiddetli sağanak'],
     85: ['🌨', 'Kar sağanağı'], 86: ['❄️', 'Yoğun kar sağanağı'], 95: ['⛈', 'Gök gürültülü fırtına'], 96: ['⛈', 'Dolulu fırtına'], 99: ['⛈', 'Dolulu fırtına'] };
-  const wmo = (c, day) => { const w = WMO[c] || ['🌡', '—']; return day === 0 && c <= 2 ? [c === 0 ? '🌙' : '☁️', c === 0 ? 'Açık' : w[1]] : w; };
+  const wmo = (c, day) => { const w = WMO[c] || ['🌡', '—']; return day === 0 && c <= 2 ? [c <= 1 ? '🌙' : '☁️', w[1]] : w; };
   const windFrom = d => d == null ? '' : ['Kuzeyden', 'Kuzeydoğudan', 'Doğudan', 'Güneydoğudan', 'Güneyden', 'Güneybatıdan', 'Batıdan', 'Kuzeybatıdan'][Math.round(((+d % 360) + 360) % 360 / 45) % 8];
   async function wxView(g, box) {
     const G = GATES.find(x => x.key === g.key);
@@ -688,6 +689,152 @@
       '<div class="grow"><div class="t">' + esc(x.title) + '</div><div class="src">' + (x.t ? ago(x.t) : '') + (x.desc ? ' · ' + esc(x.desc.slice(0, 90)) + (x.desc.length > 90 ? '…' : '') : '') + '</div></div></a>').join('')
       : '<div class="muted">Haber bulunamadı.</div>';
     const info = document.getElementById('aainfo'); if (info) info.textContent = 'Son yenileme: ' + new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ============ ROTA HAVASI (OSRM rota + Open-Meteo yer arama/tahmin) ============
+  const RT = { map: null };
+  const hhmm = ms => new Date(ms).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const dayHHMM = (ms, ref) => { const d = new Date(ms), r = new Date(ref); const sameDay = d.toDateString() === r.toDateString(); return (sameDay ? '' : d.toLocaleDateString('tr-TR', { weekday: 'short' }) + ' ') + hhmm(ms); };
+  function hav(a, b) { const R = 6371, t = Math.PI / 180, dLa = (b[1] - a[1]) * t, dLo = (b[0] - a[0]) * t; const x = Math.sin(dLa / 2) ** 2 + Math.cos(a[1] * t) * Math.cos(b[1] * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
+  async function geocode(q) {
+    const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=5&language=tr&format=json&name=' + encodeURIComponent(q));
+    if (!r.ok) throw new Error('Yer araması yapılamadı.');
+    return ((await r.json()).results || []).map(x => ({ name: x.name, sub: [x.admin1, x.country].filter(Boolean).join(', '), lat: x.latitude, lon: x.longitude }));
+  }
+  // Tehlike değerlendirmesi: [ikon, metin, seviye 0-2]
+  function hazards(w) {
+    const out = [], c = w.code;
+    if (c >= 95) out.push(['⛈', 'Fırtına', 2]);
+    else if ([75, 86].includes(c)) out.push(['❄️', 'Yoğun kar', 2]);
+    else if ([71, 73, 77, 85].includes(c)) out.push(['🌨', 'Kar', 2]);
+    else if ([56, 57, 66, 67].includes(c)) out.push(['🧊', 'Donan yağmur', 2]);
+    else if ([65, 82].includes(c)) out.push(['🌧', 'Kuvvetli yağmur', 1]);
+    else if ([61, 63, 80, 81, 53, 55].includes(c)) out.push(['🌧', 'Yağmur', 1]);
+    if ([45, 48].includes(c) || (w.vis != null && w.vis < 1000)) out.push(['🌫', 'Sis' + (w.vis != null && w.vis < 1000 ? ' (görüş ~' + Math.round(w.vis / 50) * 50 + ' m)' : ''), w.vis != null && w.vis < 300 ? 2 : 1]);
+    if (w.temp != null && w.temp <= 1 && !out.some(h => h[2] === 2 && /Kar|Donan/.test(h[1]))) out.push(['🧊', 'Buzlanma riski (' + Math.round(w.temp) + '°)', w.prec > 0 ? 2 : 1]);
+    if (w.gust != null && w.gust >= 60) out.push(['💨', 'Kuvvetli rüzgâr (hamle ' + Math.round(w.gust) + ' km/sa)', w.gust >= 80 ? 2 : 1]);
+    return out;
+  }
+  PAGES.route = {
+    title: 'Rota havası',
+    render() {
+      const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      view.innerHTML =
+        '<div class="card"><div class="muted" style="margin-bottom:10px">Gideceğin yeri yaz; yol boyunca, oraya varacağın saatteki havayı göstereyim.</div>' +
+        '<label class="muted" style="font-size:13px">Nereden</label><div class="row" style="margin:4px 0 10px"><input id="rfrom" placeholder="Konumum" autocomplete="off"><button class="iconbtn" id="rme" aria-label="Konumum" style="flex:none">📍</button></div>' +
+        '<label class="muted" style="font-size:13px">Nereye</label><input id="rto" placeholder="ör. Niş, Sofya, Selanik" autocomplete="off" style="margin:4px 0 10px">' +
+        '<label class="muted" style="font-size:13px">Yola çıkış</label><input id="rdep" type="datetime-local" value="' + now + '" style="margin:4px 0 12px">' +
+        '<button class="btn acc" id="rgo">Rotayı göster</button></div>' +
+        '<div id="rout"></div>' + footer;
+      bindFooter();
+      const from = document.getElementById('rfrom'), to = document.getElementById('rto');
+      to.value = store.get('hk_rto', ''); from.value = store.get('hk_rfrom', '');
+      document.getElementById('rme').onclick = () => { from.value = ''; from.placeholder = 'Konumum'; };
+      document.getElementById('rgo').onclick = () => routeRun();
+      to.onkeydown = e => { if (e.key === 'Enter') routeRun(); };
+    },
+    leave() { if (RT.map) { RT.map.remove(); RT.map = null; } }
+  };
+  function myPos() {
+    return new Promise((res, rej) => {
+      if (!navigator.geolocation) return rej(new Error('Konum alınamadı. "Nereden" kutusuna bir yer yaz.'));
+      navigator.geolocation.getCurrentPosition(p => res({ name: 'Konumun', sub: '', lat: p.coords.latitude, lon: p.coords.longitude }),
+        () => rej(new Error('Konum izni yok. Tarayıcıda konuma izin ver ya da "Nereden" kutusuna bir yer yaz.')), { timeout: 12000, maximumAge: 300000 });
+    });
+  }
+  async function routeRun(pickA, pickB) {
+    const out = document.getElementById('rout'); if (!out) return;
+    const fq = document.getElementById('rfrom').value.trim(), tq = document.getElementById('rto').value.trim();
+    if (!tq) { out.innerHTML = '<div class="info">Önce gideceğin yeri yaz.</div>'; return; }
+    store.set('hk_rto', tq); store.set('hk_rfrom', fq);
+    const depVal = document.getElementById('rdep').value, dep = depVal ? new Date(depVal).getTime() : Date.now();
+    out.innerHTML = '<div class="card">' + skel(3) + '</div>';
+    if (RT.map) { RT.map.remove(); RT.map = null; }
+    try {
+      const [A, Bs] = await Promise.all([pickA ? Promise.resolve(pickA) : fq ? geocode(fq).then(r => { if (!r.length) throw new Error('"' + fq + '" bulunamadı.'); return r[0]; }) : myPos(), pickB ? Promise.resolve([pickB]) : geocode(tq)]);
+      if (!Bs.length) throw new Error('"' + tq + '" bulunamadı. Şehir adını farklı yazmayı dene.');
+      const B = Bs[0];
+      // rota
+      let r; try { r = await fetch('https://router.project-osrm.org/route/v1/driving/' + A.lon + ',' + A.lat + ';' + B.lon + ',' + B.lat + '?overview=full&geometries=geojson&steps=true'); } catch (e) { throw new Error('Rota servisine ulaşılamadı. Biraz sonra tekrar dene.'); }
+      const rj = await r.json().catch(() => ({}));
+      if (!r.ok || rj.code !== 'Ok' || !rj.routes || !rj.routes.length) throw new Error('Bu iki yer arasında karayolu rotası bulunamadı.');
+      const route = rj.routes[0], coords = route.geometry.coordinates;
+      // kümülatif mesafe
+      const cum = [0]; for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + hav(coords[i - 1], coords[i]));
+      const total = cum[cum.length - 1] || 1, km = route.distance / 1000, durS = route.duration, kmOf = v => v / total * km;
+      // yol adları (adım başlangıçlarına göre)
+      const steps = [].concat(...route.legs.map(l => l.steps || [])).map(s => ({ ll: s.maneuver.location, ref: s.ref || '', name: s.name || '' }));
+      const roadAt = p => { let best = null, bd = 1e9; for (const s of steps) { if (!s.ref && !s.name) continue; const d = hav(s.ll, p); if (d < bd) { bd = d; best = s; } } return best ? (best.ref ? best.ref.split(';')[0] : best.name) : ''; };
+      // rota üzerindeki sınır kapıları (≤3 km)
+      const gatesOn = [];
+      for (const G of GATES) { let bi = -1, bd = 1e9; for (let i = 0; i < coords.length; i++) { const d = hav(coords[i], [G.lon, G.lat]); if (d < bd) { bd = d; bi = i; } } if (bd <= 5) gatesOn.push({ G, km: cum[bi] }); }
+      // örnek noktalar: ~her 60 km'de bir, 6–14 nokta
+      const n = Math.max(6, Math.min(14, Math.round(total / 60) + 1));
+      const pts = [];
+      for (let k = 0; k < n; k++) { const target = total * k / (n - 1); let i = cum.findIndex(c => c >= target); if (i < 0) i = coords.length - 1; pts.push({ ll: coords[i], km: cum[i] }); }
+      // sınır beklemesi (Türkiye'den çıkış yönü)
+      let waitMin = 0, gateInfo = null;
+      if (gatesOn.length) {
+        const gg = gatesOn[0]; gateInfo = { label: gg.G.label, km: gg.km, wait: null };
+        // Başlangıç İstanbul'a varıştan daha yakınsa Türkiye'den çıkış sayılır
+        const IST = [28.97, 41.01], fromTR = hav([A.lon, A.lat], IST) < hav([B.lon, B.lat], IST);
+        try { const b = await api('v4/data/queue', 'ppid=' + (fromTR ? gg.G.out : gg.G.in)); const sn = snapOf(b); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(data(b)).part); if (m != null && isFinite(m)) { gateInfo.wait = m; waitMin = m; } } catch (e) {}
+      }
+      const etaAt = kmv => dep + (kmv / total) * durS * 1000 + (gateInfo && kmv > gateInfo.km ? waitMin * 60000 : 0);
+      pts.forEach(p => { p.eta = etaAt(p.km); });
+      const arrive = etaAt(total);
+      if ((arrive - Date.now()) / 3600000 > 15 * 24) throw new Error('Tahmin en fazla 16 gün ilerisi için var. Daha yakın bir çıkış zamanı seç.');
+      // hava (tek istekte tüm noktalar)
+      const days = Math.min(16, Math.max(1, Math.ceil((arrive - Date.now()) / 86400000) + 1));
+      const wu = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(p => p.ll[1].toFixed(3)).join(',') + '&longitude=' + pts.map(p => p.ll[0].toFixed(3)).join(',') +
+        '&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_gusts_10m,visibility,is_day&timeformat=unixtime&timezone=GMT&wind_speed_unit=kmh&past_days=1&forecast_days=' + days;
+      let wj; try { const wr = await fetch(wu); if (!wr.ok) throw 0; wj = await wr.json(); } catch (e) { throw new Error('Hava durumu alınamadı. Biraz sonra tekrar dene.'); }
+      const arr = Array.isArray(wj) ? wj : [wj];
+      pts.forEach((p, i) => {
+        const H = (arr[i] || {}).hourly || {}, ts = H.time || [];
+        let j = 0, bd = Infinity; ts.forEach((t, k) => { const d = Math.abs(t * 1000 - p.eta); if (d < bd) { bd = d; j = k; } });
+        p.w = ts.length ? { temp: H.temperature_2m[j], pp: H.precipitation_probability ? H.precipitation_probability[j] : null, prec: H.precipitation ? H.precipitation[j] : 0, code: H.weather_code[j], gust: H.wind_gusts_10m ? H.wind_gusts_10m[j] : null, vis: H.visibility ? H.visibility[j] : null, day: H.is_day ? H.is_day[j] : 1 } : null;
+        p.hz = p.w ? hazards(p.w) : [];
+        p.road = roadAt(p.ll);
+      });
+      pts[0].label = A.name; pts[pts.length - 1].label = B.name;
+      // özet
+      const bad = pts.filter(p => p.hz.length);
+      const worst = Math.max(0, ...pts.map(p => Math.max(0, ...p.hz.map(h => h[2]))));
+      const sumCls = worst === 2 ? 'err' : worst === 1 ? 'info' : '';
+      const uniq = []; bad.forEach(p => p.hz.forEach(h => { if (!uniq.some(u => u[1].split(' (')[0] === h[1].split(' (')[0])) uniq.push(h); }));
+      const alts = Bs.length > 1 && !pickB ? '<div class="chips" style="margin-top:8px">' + Bs.slice(1).map((b, i) => '<button class="chip" data-alt="' + (i + 1) + '">' + esc(b.name) + ' <span class="muted" style="font-size:12px">' + esc(b.sub) + '</span></button>').join('') + '</div>' : '';
+      out.innerHTML =
+        '<div class="card"><div class="h2">' + esc(A.name) + ' → ' + esc(B.name) + '</div><div class="muted">' + esc(B.sub) + '</div>' +
+        (alts ? '<div class="muted" style="font-size:12.5px;margin-top:8px">Başka bir "' + esc(tq) + '" mi demek istedin?</div>' + alts : '') +
+        '<div class="row" style="margin-top:12px;gap:18px"><div><div class="big" style="font-size:28px">' + Math.round(km) + ' km</div><div class="muted">mesafe</div></div>' +
+        '<div><div class="big" style="font-size:28px">' + fmtMin(durS / 60 + waitMin) + '</div><div class="muted">süre' + (waitMin ? ' (sınır dahil)' : '') + '</div></div></div>' +
+        '<div class="muted" style="margin-top:8px">Çıkış ' + dayHHMM(dep, dep) + ' → varış ~' + dayHHMM(arrive, dep) + '</div>' +
+        (gateInfo ? '<div class="muted" style="margin-top:4px">🚧 ' + esc(gateInfo.label) + ' sınır kapısı' + (gateInfo.wait != null ? ' · şu an ~' + fmtMin(gateInfo.wait) + ' bekleme' : '') + '</div>' : '') +
+        '<div class="' + (sumCls || 'card') + '" style="margin-top:12px;' + (sumCls ? '' : 'background:var(--ok-soft);color:var(--ok);border:0;border-radius:14px;padding:12px 14px') + '">' +
+        (uniq.length ? '<b>Yolda dikkat:</b><br>' + uniq.map(h => h[0] + ' ' + esc(h[1])).join('<br>') : '✅ Rota boyunca önemli bir hava olayı beklenmiyor.') + '</div></div>' +
+        '<div id="rtmap" style="height:260px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);margin:12px 0;background:#dfe6ec"></div>' +
+        '<div class="card list">' + pts.map((p, i) => {
+          const w = p.w, [ic, tx] = w ? wmo(w.code, w.day) : ['❔', 'veri yok'];
+          const gateHere = gateInfo && i > 0 && pts[i - 1].km < gateInfo.km && p.km >= gateInfo.km ? '<div class="it" style="padding:8px 0"><div class="badge" style="background:#eef0f3;color:var(--ink)">🚧</div><div class="grow"><div class="t">' + esc(gateInfo.label) + ' sınır kapısı</div><div class="s">' + (gateInfo.wait != null ? '~' + fmtMin(gateInfo.wait) + ' bekleme (şu anki)' : 'bekleme bilinmiyor') + '</div></div></div>' : '';
+          return gateHere + '<div class="it"><div class="badge"' + (p.hz.some(h => h[2] === 2) ? ' style="background:var(--bad-soft);color:var(--bad)"' : p.hz.length ? ' style="background:var(--mid-soft);color:#7a5600"' : ' style="background:var(--ok-soft);color:var(--ok)"') + '>' + hhmm(p.eta) + '<small>' + Math.round(kmOf(p.km)) + ' km</small></div>' +
+            '<div class="grow"><div class="t">' + (p.label ? esc(p.label) : esc(p.road || 'yol üzeri')) + '</div>' +
+            '<div class="s">' + ic + ' ' + tx + (w ? ' · ' + Math.round(w.temp) + '°' + (w.pp ? ' · 💧%' + w.pp : '') : '') + '</div>' +
+            (p.hz.length ? '<div class="s" style="color:' + (p.hz.some(h => h[2] === 2) ? 'var(--bad)' : '#7a5600') + ';font-weight:600">' + p.hz.map(h => h[0] + ' ' + esc(h[1])).join(' · ') + '</div>' : '') + '</div></div>';
+        }).join('') + '</div>' +
+        '<div class="muted" style="font-size:11.5px;text-align:center;line-height:1.6">Saatler tahminidir; mola vermezsen geçerli. Hava: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · Rota: <a href="https://project-osrm.org" target="_blank" rel="noopener">OSRM</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div>';
+      out.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => routeRun(A, Bs[+b.dataset.alt]));
+      // harita
+      try {
+        await loadLeaflet();
+        if (!document.getElementById('rtmap')) return;
+        RT.map = L.map('rtmap', { zoomControl: false, attributionControl: false });
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'rbase' }).addTo(RT.map);
+        const line = L.polyline(coords.map(c => [c[1], c[0]]), { color: '#1d2433', weight: 4, opacity: .8 }).addTo(RT.map);
+        pts.forEach(p => { const lv = Math.max(-1, ...p.hz.map(h => h[2])); L.circleMarker([p.ll[1], p.ll[0]], { radius: 7, weight: 2, color: '#fff', fillOpacity: 1, fillColor: lv === 2 ? '#d6383a' : lv === 1 ? '#c98a06' : '#1f9d61' }).addTo(RT.map).bindTooltip(hhmm(p.eta) + ' · ' + (p.w ? Math.round(p.w.temp) + '°' : '')); });
+        RT.map.fitBounds(line.getBounds(), { padding: [18, 18] });
+      } catch (e) { const m = document.getElementById('rtmap'); if (m) m.remove(); }
+    } catch (e) { out.innerHTML = '<div class="err">' + esc(e.message || 'Bir şeyler ters gitti.') + '</div>'; }
   }
 
   // ============ YAĞIŞ RADARI (RainViewer) ============
