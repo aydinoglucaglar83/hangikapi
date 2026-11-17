@@ -195,6 +195,14 @@
       if (c) { f = c; return; } } });
     return f ? { part: f, car: true } : { part: o, car: false };
   }
+  // nakordoni v4: { data:[geçmiş], snapshot:{ queue_now, wait_min, age_min, updated_at } }
+  function snapOf(d) {
+    let s = null;
+    walk(d, o => { if (!s && ('wait_min' in o || 'queue_now' in o)) s = o; });
+    return s;
+  }
+  const ageText = s => s && s.age_min != null && !isNaN(+s.age_min)
+    ? (+s.age_min < 60 ? Math.round(s.age_min) + ' dk önce güncellendi' : Math.floor(s.age_min / 60) + ' sa ' + Math.round(s.age_min % 60) + ' dk önce güncellendi') : '';
   function waitOf(q) {
     for (const [re, f] of [[/^car_?wait/i, 1], [/^wait_?min/i, 1], [/wait.*min/i, 1], [/wait.*hour/i, 60], [/wait.*sec/i, 1 / 60], [/^wait$|wait_?time|estimated_?wait/i, 1]]) {
       const v = pick(q, [re]); if (v != null && !isNaN(+v)) return +v * f;
@@ -233,7 +241,7 @@
     const take = (o, id) => {
       const txt = JSON.stringify(o).toLowerCase();
       const g = GATES.find(g => g.terms.some(t => txt.includes(t)));
-      if (g && !out.some(x => x.ppid === id)) out.push({ ppid: id, label: g.label, key: g.key });
+      if (g && !out.some(x => x.ppid === id)) out.push({ ppid: id, label: g.label, key: g.key, car: /"car"|\bcars?\b|passenger/i.test(txt) });
     };
     const scan = body => walk(body, o => {
       const id = o.ppid ?? (typeof o.id === 'string' && /^id_\d+$/.test(o.id) ? o.id : null);
@@ -284,7 +292,7 @@
       if (!gates.length) { box.innerHTML = '<div class="note">Bu kapılar nakordoni\'de bulunamadı.</div>'; return; }
       const cells = [];
       for (const g of gates.slice(0, 3)) {
-        try { const q = carPart(data(await api('v4/data/queue', 'ppid=' + g.ppid))).part; const m = waitOf(q); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
+        try { const d = data(await api('v4/data/queue', 'ppid=' + g.ppid)); const sn = snapOf(d); const m = sn && sn.wait_min != null ? +sn.wait_min : waitOf(carPart(d).part); g.wait = m; cells.push([g.label, fmtMin(m), level(m)[1]]); }
         catch (e) { cells.push([g.label, '—', 'veri yok']); }
       }
       if (document.getElementById('heroBody') !== box) return;
@@ -313,14 +321,16 @@
     const el = document.getElementById('g-' + g.ppid); if (!el) return;
     let m = g.wait, len, upd;
     try {
-      const cp = carPart(data(await api('v4/data/queue', 'ppid=' + g.ppid)));
-      const q = cp.part; g.carOnly = cp.car;
-      m = waitOf(q); len = pick(q, [/queue_?len/i, /^queue$/i, /cars|vehicles|count/i]); upd = pick(q, [/updated|last_?update|timestamp/i]);
+      const d = data(await api('v4/data/queue', 'ppid=' + g.ppid));
+      const sn = snapOf(d), cp = carPart(d), q = cp.part;
+      g.carOnly = g.car || cp.car;
+      if (sn) { m = sn.wait_min != null ? +sn.wait_min : waitOf(q); len = sn.queue_now; upd = ageText(sn); }
+      else { m = waitOf(q); len = pick(q, [/queue_?len/i, /^queue$/i, /queue_now/i]); upd = ''; }
     } catch (e) { el.innerHTML = '<div class="t">' + esc(g.label) + '</div>' + errBox(e); return; }
     const [cls, word] = level(m);
     el.innerHTML =
       '<div class="row"><div class="grow"><div class="h2">' + esc(g.label) + '</div>' +
-      '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + (g.carOnly ? ' otomobil' : ' araç') : '') + (upd ? ' · ' + new Date(upd).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '') + '</div></div>' +
+      '<div class="muted">' + (len != null ? 'Kuyrukta ' + esc(len) + (g.carOnly ? ' otomobil' : ' araç') : '') + (upd ? ' · ' + esc(upd) : '') + '</div></div>' +
       '<span class="pill ' + cls + '">' + word + '</span></div>' +
       '<div class="big" style="margin:8px 0 4px">' + fmtMin(m) + '</div><div class="muted">tahmini bekleme · ' + (g.carOnly ? '🚗 binek araç' : 'tüm araçlar') + '</div>' +
       '<div class="chips" style="margin-top:12px"><button class="chip" data-a="fc">📈 Sonraki 24 saat</button><button class="chip" data-a="best">🕐 En iyi saat</button><button class="chip" data-a="wx">🌦 Hava</button></div>' +
@@ -333,7 +343,7 @@
   function numSeries(o) {
     let s = null;
     walk(o, x => { if (s) return; for (const v of Object.values(x)) if (Array.isArray(v) && v.length >= 6) {
-      const n = v.map(i => typeof i === 'number' ? i : i && typeof i === 'object' ? +(i.wait_minutes ?? i.wait ?? i.value ?? i.queue ?? i.avg ?? i.load ?? NaN) : NaN);
+      const n = v.map(i => typeof i === 'number' ? i : i && typeof i === 'object' ? +(i.wait_minutes ?? i.wait_min ?? i.wait_time ?? i.wait ?? i.value ?? i.queue ?? i.avg ?? i.load ?? NaN) : NaN);
       if (n.filter(Number.isFinite).length >= v.length * .8) { s = n; return; } } });
     return s;
   }
