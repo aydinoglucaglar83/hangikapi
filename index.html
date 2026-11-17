@@ -246,7 +246,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 25 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 26 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -303,7 +303,7 @@
         tile('gates', '🚧', 'Kapılar', 'Bekleme, tahmin, en iyi saat') +
         '<button class="tile" data-p="route" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🗺</span><span><b>Rota havası</b><small>Gideceğin yeri yaz, yol boyunca hava olayları</small></span></button>' +
         '<button class="tile" data-p="aanews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">📰</span><span><b>Son dakika</b><small>Anadolu Ajansı · güncel, ekonomi, dünya, spor…</small></span></button>' +
-        '<button class="tile" data-p="avnews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">✈️</span><span><b>Havacılık haberleri</b><small>AirportHaber, Havayolu101, Simple Flying, AeroTime</small></span></button>' +
+        '<button class="tile" data-p="cnews" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🗞</span><span><b>Komşu ülke haberleri</b><small>BTA, AMNA, Tanjug ajansları · Türkçe çeviri</small></span></button>' +
         '<button class="tile" data-p="radar" style="grid-column:1/-1;min-height:auto;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px"><span class="ic">🌧</span><span><b>Yağış radarı</b><small>Canlı yağmur haritası, son 2 saat</small></span></button>' +
         '</div>' + footer;
       view.querySelectorAll('.tile').forEach(t => t.onclick = () => go(t.dataset.p));
@@ -618,14 +618,14 @@
     }
   };
 
-  // ============ HAVACILIK HABERLERİ (RSS) ============
-  const AV_SRC = [
-    { id: 'airporthaber', name: 'AirportHaber', lang: 'tr' },
-    { id: 'havayolu101', name: 'Havayolu101', lang: 'tr' },
-    { id: 'simpleflying', name: 'Simple Flying', lang: 'en' },
-    { id: 'aerotime', name: 'AeroTime', lang: 'en' }
+  // ============ KOMŞU ÜLKE HABERLERİ (Google Haberler RSS, Türkçe) ============
+  const CN_SRC = [
+    { id: 'gnsinir', name: '🚧 Sınır kapıları' },
+    { id: 'bta', name: '🇧🇬 Bulgaristan', label: 'BTA · Bulgaristan Haber Ajansı' },
+    { id: 'amna', name: '🇬🇷 Yunanistan', label: 'AMNA · Atina-Makedonya Haber Ajansı' },
+    { id: 'tanjug', name: '🇷🇸 Sırbistan', label: 'Tanjug · Sırbistan haber ajansı' }
   ];
-  const AV = { items: [], filter: 'all', loaded: 0 };
+  const CN = { cat: 'gnsinir', cache: {} };
   const textOf = (el, sel) => { const n = el.getElementsByTagName(sel)[0]; return n ? n.textContent.trim() : ''; };
   const stripHtml = s => { const d = document.createElement('div'); d.innerHTML = s; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
   function ago(t) {
@@ -644,38 +644,40 @@
       let img = (enc && /image/.test(enc.getAttribute('type') || 'image') && enc.getAttribute('url')) || (media && media.getAttribute('url')) || textOf(it, 'thumb') || textOf(it, 'image');
       const desc = textOf(it, 'description');
       if (!img) { const m = desc.match(/<img[^>]+src=["']([^"']+)/i); if (m) img = m[1]; }
-      const t = Date.parse(textOf(it, 'pubDate')) || 0;
-      return { title: stripHtml(textOf(it, 'title')), link: textOf(it, 'link'), desc: stripHtml(desc).slice(0, 160), img: /^https?:/.test(img || '') ? img : '', t, src };
+      const t = Date.parse(textOf(it, 'pubDate') || textOf(it, 'dc:date')) || 0;
+      const srcName = textOf(it, 'source'); let title = stripHtml(textOf(it, 'title'));
+      if (srcName && title.endsWith(' - ' + srcName)) title = title.slice(0, -(srcName.length + 3));
+      return { title, orig: textOf(it, 'orig'), tr: textOf(it, 'translated') === '1', link: textOf(it, 'link'), desc: srcName ? '' : stripHtml(desc).slice(0, 160), pub: srcName, img: /^https?:/.test(img || '') ? img : '', t, src };
     }).filter(x => x.title && x.link);
   }
-  PAGES.avnews = {
-    title: 'Havacılık haberleri',
-    async render() {
-      view.innerHTML = '<div class="chips" id="avc">' +
-        [['all', 'Tümü'], ['tr', '🇹🇷 Türkçe'], ['en', '🇬🇧 English']].concat(AV_SRC.map(s => [s.id, s.name]))
-          .map(([k, l]) => '<button class="chip' + (k === AV.filter ? ' on' : '') + '" data-f="' + k + '">' + l + '</button>').join('') +
-        '</div><div class="card" id="avlist">' + skel(5) + '</div><div class="muted" id="avinfo" style="text-align:center;font-size:12px"></div>' + footer;
+  PAGES.cnews = {
+    title: 'Komşu ülke haberleri',
+    render() {
+      view.innerHTML = '<div class="chips" id="cnc">' + CN_SRC.map(c => '<button class="chip' + (c.id === CN.cat ? ' on' : '') + '" data-c="' + c.id + '">' + esc(c.name) + '</button>').join('') +
+        '</div><div class="card" id="cnlist">' + skel(5) + '</div><div class="muted" id="cninfo" style="text-align:center;font-size:12px"></div>' +
+        '<div class="muted" style="text-align:center;font-size:11px;margin-top:4px" id="cnsrc"></div>' + footer;
       bindFooter();
-      document.getElementById('avc').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; AV.filter = b.dataset.f; document.querySelectorAll('#avc .chip').forEach(x => x.classList.toggle('on', x === b)); avRender(); };
-      if (AV.items.length && Date.now() - AV.loaded < 5 * 60 * 1000) return avRender();
-      const res = await Promise.allSettled(AV_SRC.map(loadFeed));
-      AV.items = res.flatMap(r => r.status === 'fulfilled' ? r.value : []).sort((a, b) => b.t - a.t);
-      AV.failed = AV_SRC.filter((s, i) => res[i].status !== 'fulfilled').map(s => s.name);
-      AV.loaded = Date.now();
-      avRender();
+      document.getElementById('cnc').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; CN.cat = b.dataset.c; document.querySelectorAll('#cnc .chip').forEach(x => x.classList.toggle('on', x === b)); cnLoad(); };
+      cnLoad();
     }
   };
-  function avRender() {
-    const box = document.getElementById('avlist'); if (!box) return;
-    const f = AV.filter;
-    const list = AV.items.filter(x => f === 'all' || x.src.lang === f || x.src.id === f);
-    box.innerHTML = list.length ? list.slice(0, 60).map(x =>
+  async function cnLoad() {
+    const box = document.getElementById('cnlist'); if (!box) return;
+    const cat = CN_SRC.find(c => c.id === CN.cat), c = CN.cache[cat.id];
+    if (!(c && Date.now() - c.t < 5 * 60 * 1000)) {
+      box.innerHTML = skel(5);
+      try { const seen = new Set(); CN.cache[cat.id] = { t: Date.now(), items: (await loadFeed(cat)).sort((a, b) => b.t - a.t).filter(x => { const k = x.title.toLowerCase().slice(0, 60); if (seen.has(k)) return false; seen.add(k); return true; }) }; }
+      catch (e) { if (CN.cat === cat.id) box.innerHTML = '<div class="err">' + esc(cat.name) + ' haberleri şu an alınamadı.</div>'; return; }
+    }
+    if (CN.cat !== cat.id || !document.getElementById('cnlist')) return;
+    const { items, t } = CN.cache[cat.id];
+    box.innerHTML = items.length ? items.slice(0, 50).map(x =>
       '<a class="news" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
       (x.img ? '<img loading="lazy" src="' + esc(x.img) + '" alt="" onerror="this.remove()">' : '') +
-      '<div class="grow"><div class="t">' + esc(x.title) + '</div><div class="src">' + esc(x.src.name) + ' · ' + (x.t ? ago(x.t) : '') + '</div></div></a>').join('')
-      : '<div class="muted">Haber bulunamadı.</div>';
-    const info = document.getElementById('avinfo');
-    if (info) info.textContent = (AV.failed && AV.failed.length ? 'Alınamayan kaynak: ' + AV.failed.join(', ') + ' · ' : '') + 'Son yenileme: ' + new Date(AV.loaded).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      '<div class="grow"><div class="t">' + esc(x.title) + '</div>' + (x.tr && x.orig && x.orig !== x.title ? '<div class="s" style="font-size:12px;opacity:.75">' + esc(x.orig) + '</div>' : '') + '<div class="src">' + esc(x.pub || cat.label || '') + (x.tr ? ' · 🔁 çeviri' : '') + (x.t ? ' · ' + ago(x.t) : '') + '</div></div></a>').join('')
+      : '<div class="muted">Son günlerde haber bulunamadı.</div>';
+    const sEl = document.getElementById('cnsrc'); if (sEl) sEl.textContent = cat.label ? 'Kaynak: ' + cat.label + ' · başlıklar otomatik çevrildi (Google Çeviri)' : 'Türkçe haberler · Kaynak: Google Haberler';
+    const info = document.getElementById('cninfo'); if (info) info.textContent = 'Son yenileme: ' + new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   }
 
   // ============ SON DAKİKA (Anadolu Ajansı RSS) ============
