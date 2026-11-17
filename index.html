@@ -246,7 +246,7 @@
   document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : go('home');
   document.getElementById('setBtn').onclick = () => go('settings');
   const footer = '<footer><a href="https://nakordoni.eu" target="_blank" rel="noopener">Data by nakordoni.eu</a><br>' +
-    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 26 · 17.11.2026</span></footer>';
+    '<a href="#" id="dl">⬇︎ Bu uygulamayı indir</a><br><span style="font-size:11px;opacity:.7">Sürüm 27 · 17.11.2026</span></footer>';
   function bindFooter() {
     const a = document.getElementById('dl'); if (!a) return;
     a.onclick = ev => { ev.preventDefault(); const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([SOURCE], { type: 'text/html' })); l.download = 'hangikapi.html'; document.body.appendChild(l); l.click(); l.remove(); };
@@ -623,7 +623,7 @@
     { id: 'gnsinir', name: '🚧 Sınır kapıları' },
     { id: 'bta', name: '🇧🇬 Bulgaristan', label: 'BTA · Bulgaristan Haber Ajansı' },
     { id: 'amna', name: '🇬🇷 Yunanistan', label: 'AMNA · Atina-Makedonya Haber Ajansı' },
-    { id: 'tanjug', name: '🇷🇸 Sırbistan', label: 'Tanjug · Sırbistan haber ajansı' }
+    { id: 'tanjug', name: '🇷🇸 Sırbistan', label: 'Sırbistan haberleri' }
   ];
   const CN = { cat: 'gnsinir', cache: {} };
   const textOf = (el, sel) => { const n = el.getElementsByTagName(sel)[0]; return n ? n.textContent.trim() : ''; };
@@ -638,6 +638,7 @@
     const r = await fetch(S.url.replace(/\/+$/, '') + '/feed/' + src.id);
     if (!r.ok) throw new Error(src.name);
     const doc = new DOMParser().parseFromString(await r.text(), 'text/xml');
+    const chl = doc.querySelector('channel > link'); src.used = chl ? chl.textContent.trim() : '';
     return [...doc.getElementsByTagName('item')].map(it => {
       const enc = it.getElementsByTagName('enclosure')[0];
       const media = it.getElementsByTagName('media:content')[0] || it.getElementsByTagName('media:thumbnail')[0];
@@ -674,9 +675,9 @@
     box.innerHTML = items.length ? items.slice(0, 50).map(x =>
       '<a class="news" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
       (x.img ? '<img loading="lazy" src="' + esc(x.img) + '" alt="" onerror="this.remove()">' : '') +
-      '<div class="grow"><div class="t">' + esc(x.title) + '</div>' + (x.tr && x.orig && x.orig !== x.title ? '<div class="s" style="font-size:12px;opacity:.75">' + esc(x.orig) + '</div>' : '') + '<div class="src">' + esc(x.pub || cat.label || '') + (x.tr ? ' · 🔁 çeviri' : '') + (x.t ? ' · ' + ago(x.t) : '') + '</div></div></a>').join('')
+      '<div class="grow"><div class="t">' + esc(x.title) + '</div>' + (x.tr && x.orig && x.orig !== x.title ? '<div class="s" style="font-size:12px;opacity:.75">' + esc(x.orig) + '</div>' : '') + '<div class="src">' + esc(x.pub || (cat.used ? cat.used.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : cat.label) || '') + (x.tr ? ' · 🔁 çeviri' : '') + (x.t ? ' · ' + ago(x.t) : '') + '</div></div></a>').join('')
       : '<div class="muted">Son günlerde haber bulunamadı.</div>';
-    const sEl = document.getElementById('cnsrc'); if (sEl) sEl.textContent = cat.label ? 'Kaynak: ' + cat.label + ' · başlıklar otomatik çevrildi (Google Çeviri)' : 'Türkçe haberler · Kaynak: Google Haberler';
+    const sEl = document.getElementById('cnsrc'); if (sEl) sEl.textContent = cat.label ? 'Kaynak: ' + (cat.used ? cat.used.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : cat.label) + ' · ' + (items.some(x => x.tr) ? 'başlıklar otomatik çevrildi (Google Çeviri)' : '⚠️ çeviri şu an yapılamadı, birazdan yenile') : 'Türkçe haberler · Kaynak: Google Haberler';
     const info = document.getElementById('cninfo'); if (info) info.textContent = 'Son yenileme: ' + new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   }
 
